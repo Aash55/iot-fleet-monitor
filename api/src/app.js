@@ -2,7 +2,9 @@ import express from "express";
 import cors from "cors";
 import { pool } from "./db.js";
 import { authRouter } from "./routes/auth.js";
+import { devicesRouter } from "./routes/devices.js";
 import { requireAuth } from "./middleware/auth.js";
+import { requireDevice } from "./middleware/deviceAuth.js";
 
 const app = express();
 
@@ -19,7 +21,9 @@ app.get("/health", async (req, res) => {
   }
 });
 
+// human-facing routes: JWT
 app.use("/auth", authRouter);
+app.use("/devices", requireAuth, devicesRouter);
 
 app.get("/me", requireAuth, async (req, res, next) => {
   try {
@@ -32,6 +36,11 @@ app.get("/me", requireAuth, async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+});
+
+// machine-facing routes: device API key. /ingest joins this group in P2.
+app.get("/device/whoami", requireDevice, (req, res) => {
+  res.json({ device: req.device });
 });
 
 app.use((err, req, res, next) => {
