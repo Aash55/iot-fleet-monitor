@@ -1,6 +1,6 @@
 import app from "./app.js";
 
-const required = ["DATABASE_URL", "JWT_SECRET"];
+const required = ["DATABASE_URL", "JWT_SECRET", "CORS_ORIGIN"];
 const missing = required.filter((key) => !process.env[key]);
 if (missing.length) {
   console.error("Missing env variables:", missing.join(", "));
