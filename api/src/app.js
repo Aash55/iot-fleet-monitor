@@ -43,7 +43,7 @@ app.get("/device/whoami", requireDevice, (req, res) => {
   res.json({ device: req.device });
 });
 
-app.use((err, req, res, next) => {
+app.use((err, req, res, _next) => {
   console.error("Unhandled error:", err.message || err.code);
   res.status(500).json({ error: "internal server error" });
 });
