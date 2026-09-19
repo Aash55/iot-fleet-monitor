@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
+import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router'
 import { getHealth, getMe } from './api.js'
 import { readToken, saveToken, clearToken } from './auth.js'
 import LoginForm from './LoginForm.jsx'
 import DevicesList from './DevicesList.jsx'
+import RequireAuth from './RequireAuth.jsx'
 
 export default function App() {
   const [apiStatus, setApiStatus] = useState('Checking API...')
@@ -10,6 +12,8 @@ export default function App() {
     const token = readToken()
     return token ? { token, user: null } : null
   })
+  const navigate = useNavigate()
+  const location = useLocation()
 
   useEffect(() => {
     getHealth()
@@ -17,7 +21,8 @@ export default function App() {
       .catch(() => setApiStatus('API unreachable. Check the browser console.'))
   }, [])
 
-  // handleLogout ki identity stable rehni chahiye: DevicesList ke effect ki dependency hai.
+  // Deps khaali: identity stable rehni chahiye, DevicesList ke effect ki dependency hai.
+  // Redirect yahan nahi - session null hote hi RequireAuth khud /login bhej dega.
   const handleLogout = useCallback(() => {
     clearToken()
     setSession(null)
@@ -38,12 +43,15 @@ export default function App() {
   function handleLogin({ user, token }) {
     saveToken(token)
     setSession({ user, token })
+    navigate(location.state?.from ?? '/devices', { replace: true })
   }
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <header className="flex items-center justify-between bg-slate-900 px-6 py-4 text-white">
-        <h1 className="text-xl font-semibold">Fleet Monitor</h1>
+        <Link to="/devices" className="text-xl font-semibold hover:text-slate-300">
+          Fleet Monitor
+        </Link>
         <div className="flex items-center gap-4">
           <p className="text-sm text-slate-300">{apiStatus}</p>
           {session && (
@@ -59,18 +67,34 @@ export default function App() {
       </header>
 
       <main className="mx-auto max-w-3xl px-6 py-10">
-        {session ? (
-          <>
-            <p className="mb-6 text-sm text-slate-500">
-              Signed in{session.user ? ` as ${session.user.email}` : ', verifying session...'}
-            </p>
-            <DevicesList token={session.token} onAuthError={handleLogout} />
-          </>
-        ) : (
-          <div className="mx-auto max-w-md">
-            <LoginForm onSuccess={handleLogin} />
-          </div>
-        )}
+        <Routes>
+          <Route
+            path="/login"
+            element={
+              session ? (
+                <Navigate to="/devices" replace />
+              ) : (
+                <div className="mx-auto max-w-md">
+                  <LoginForm onSuccess={handleLogin} />
+                </div>
+              )
+            }
+          />
+
+          <Route
+            path="/devices"
+            element={
+              <RequireAuth session={session}>
+                <p className="mb-6 text-sm text-slate-500">
+                  Signed in{session?.user ? ` as ${session.user.email}` : ', verifying session...'}
+                </p>
+                <DevicesList token={session?.token} onAuthError={handleLogout} />
+              </RequireAuth>
+            }
+          />
+
+          <Route path="*" element={<Navigate to="/devices" replace />} />
+        </Routes>
       </main>
     </div>
   )
