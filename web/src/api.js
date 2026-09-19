@@ -53,3 +53,24 @@ export async function getDevices(token) {
   const { devices } = await res.json()
   return devices
 }
+
+export async function createDevice(token, name) {
+  const res = await fetch(`${API_URL}/devices`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ name }),
+  })
+
+  if (res.status === 400) {
+    const body = await res.json().catch(() => ({}))
+    throw new ApiError(body.error?.name?.[0] ?? 'Device name is not valid.', 400)
+  }
+  if (!res.ok) {
+    throw new ApiError(`Could not add device: HTTP ${res.status}`, res.status)
+  }
+
+  return res.json() // { device, api_key }
+}

@@ -5,7 +5,7 @@ import { generateApiKey, hashApiKey } from "../apiKey.js";
 
 export const devicesRouter = Router();
 
-const deviceInput = z.object({ name: z.string().min(1).max(100) });
+const deviceInput = z.object({ name: z.string().trim().min(1).max(100) });
 const idParam = z.coerce.number().int().positive();
 
 const PUBLIC_COLUMNS = "id, name, status, last_seen, created_at";
