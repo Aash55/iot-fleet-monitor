@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { getHealth, getMe } from './api.js'
 import { readToken, saveToken, clearToken } from './auth.js'
 import LoginForm from './LoginForm.jsx'
+import DevicesList from './DevicesList.jsx'
 
 export default function App() {
   const [apiStatus, setApiStatus] = useState('Checking API...')
@@ -16,6 +17,12 @@ export default function App() {
       .catch(() => setApiStatus('API unreachable. Check the browser console.'))
   }, [])
 
+  // handleLogout ki identity stable rehni chahiye: DevicesList ke effect ki dependency hai.
+  const handleLogout = useCallback(() => {
+    clearToken()
+    setSession(null)
+  }, [])
+
   // Token from localStorage is only a claim. Ask /me whether the API still accepts it.
   useEffect(() => {
     if (!session || session.user) return
@@ -23,23 +30,14 @@ export default function App() {
 
     getMe(session.token)
       .then((user) => { if (active) setSession((prev) => prev && { ...prev, user }) })
-      .catch(() => {
-        if (!active) return
-        clearToken()
-        setSession(null)
-      })
+      .catch(() => { if (active) handleLogout() })
 
     return () => { active = false }
-  }, [session])
+  }, [session, handleLogout])
 
   function handleLogin({ user, token }) {
     saveToken(token)
     setSession({ user, token })
-  }
-
-  function handleLogout() {
-    clearToken()
-    setSession(null)
   }
 
   return (
@@ -60,14 +58,18 @@ export default function App() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-md px-6 py-10">
+      <main className="mx-auto max-w-3xl px-6 py-10">
         {session ? (
-          <p className="rounded-lg border border-slate-200 bg-white p-6 text-sm">
-            Signed in{session.user ? ` as ${session.user.email}` : ', verifying session...'}.
-            Devices list 4.4 mein aayegi.
-          </p>
+          <>
+            <p className="mb-6 text-sm text-slate-500">
+              Signed in{session.user ? ` as ${session.user.email}` : ', verifying session...'}
+            </p>
+            <DevicesList token={session.token} onAuthError={handleLogout} />
+          </>
         ) : (
-          <LoginForm onSuccess={handleLogin} />
+          <div className="mx-auto max-w-md">
+            <LoginForm onSuccess={handleLogin} />
+          </div>
         )}
       </main>
     </div>
