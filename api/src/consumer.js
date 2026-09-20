@@ -17,6 +17,31 @@ let loop = null;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// server.js ke boot race jaisa hi. node-redis mare hue socket pe HAMESHA retry karta
+// rehta hai, to bina race ke connect() na resolve hota hai na reject - process chup-chaap
+// latka rehta hai. Render pe iska matlab: app.listen() tak pahunchte hi nahi, deploy fail.
+const CONNECT_TIMEOUT_MS = 5000;
+
+async function connectOrFail(client) {
+  let timer;
+  try {
+    await Promise.race([
+      client.connect(),
+      new Promise((_resolve, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`Consumer redis connect timed out after ${CONNECT_TIMEOUT_MS}ms`)),
+          CONNECT_TIMEOUT_MS
+        );
+      }),
+    ]);
+  } catch (err) {
+    client.destroy(); // retry loop band karo, warna event loop khula reh jaata hai
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function startConsumer() {
   if (running) return;
 
@@ -24,7 +49,7 @@ export async function startConsumer() {
   // shared client that would park /health's PING and /ingest's XADD behind it.
   stream = redis.duplicate();
   stream.on("error", (err) => console.error("Consumer redis error:", errText(err)));
-  await stream.connect();
+  await connectOrFail(stream);
 
   await ensureGroup();
   running = true;
