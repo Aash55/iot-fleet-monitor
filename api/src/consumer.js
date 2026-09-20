@@ -111,9 +111,9 @@ async function handleBatch(messages) {
     }
   }
 
-  const { doneIds, poisonIds } = rows.length
+  const { doneIds, poisonIds, inserted} = rows.length
     ? await insertReadings(rows)
-    : { doneIds: [], poisonIds: [] };
+    : { doneIds: [], poisonIds: [], inserted: 0 };
 
   const done = new Set(doneIds);
   await touchDevices(rows.filter((r) => done.has(r.stream_id)));
@@ -121,8 +121,9 @@ async function handleBatch(messages) {
   const ackIds = [...dropIds, ...doneIds, ...poisonIds];
   if (ackIds.length) {
     const acked = await stream.xAck(TELEMETRY_STREAM, CONSUMER_GROUP, ackIds);
+    const duplicate = doneIds.length - inserted;
     console.log(
-      `Consumer: ${doneIds.length} written, ${dropIds.length + poisonIds.length} dropped, ${acked} acked`
+      `Consumer: ${doneIds.length} written, ${duplicate} duplicate, ${dropIds.length + poisonIds.length} dropped, ${acked} acked`
     );
   }
 }
@@ -130,8 +131,8 @@ async function handleBatch(messages) {
 async function insertReadings(rows) {
   if (rows.length > 1) {
     try {
-      await insertMany(rows);
-      return { doneIds: rows.map((r) => r.stream_id), poisonIds: [] };
+      const inserted = await insertMany(rows);
+      return { doneIds: rows.map((r) => r.stream_id), poisonIds: [] ,inserted};
     } catch (err) {
       // One bad row fails the whole multi-row INSERT. Split so the good rows land.
       console.error("Consumer: batch insert failed, retrying row by row:", errText(err));
@@ -140,9 +141,10 @@ async function insertReadings(rows) {
 
   const doneIds = [];
   const poisonIds = [];
+  let inserted = 0; 
   for (const row of rows) {
     try {
-      await insertMany([row]);
+      inserted += await insertMany([row]);
       doneIds.push(row.stream_id);
     } catch (err) {
       // pg class 23 = integrity constraint violation (e.g. 23503, device deleted
@@ -155,7 +157,7 @@ async function insertReadings(rows) {
       }
     }
   }
-  return { doneIds, poisonIds };
+  return { doneIds, poisonIds, inserted };
 }
 
 async function insertMany(rows) {
@@ -169,12 +171,13 @@ async function insertMany(rows) {
 
   // ON CONFLICT DO NOTHING on stream_id is what turns at-least-once delivery into
   // exactly-once storage. Redelivery after a crash becomes a harmless no-op.
-  await pool.query(
+  const { rowCount } = await pool.query(
     `INSERT INTO readings (stream_id, device_id, owner_id, ts, received_at, metrics)
      VALUES ${tuples.join(", ")}
      ON CONFLICT (stream_id) DO NOTHING`,
     params
   );
+  return rowCount; 
 }
 
 async function touchDevices(rows) {
