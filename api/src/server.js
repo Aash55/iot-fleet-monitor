@@ -1,6 +1,7 @@
 import app from "./app.js";
 import { redis } from "./redis.js";
 import { errText } from "./errText.js";
+import { startConsumer } from "./consumer.js";
 
 const required = ["DATABASE_URL", "JWT_SECRET", "CORS_ORIGIN", "REDIS_URL"];
 const missing = required.filter((key) => !process.env[key]);
@@ -30,6 +31,14 @@ try {
   process.exit(1);
 }
 
+if (process.env.RUN_CONSUMER_IN_API === "true") {
+  try {
+    await startConsumer();
+  } catch (err) {
+    console.error("Consumer start failed:", errText(err));
+    process.exit(1);
+  }
+}
 const PORT = process.env.PORT || 4000;
 
 // Express 5 passes listen errors (e.g. EADDRINUSE) to this callback instead of throwing
