@@ -1,4 +1,5 @@
 import pg from "pg";
+import { errText } from "./errText.js"; 
 
 const { Pool } = pg;
 
@@ -8,5 +9,5 @@ export const pool = new Pool({
 });
 
 pool.on("error", (err) => {
-  console.error("Postgres idle client error:", err.message);
+  console.error("Postgres idle client error:", errText(err)); 
 });

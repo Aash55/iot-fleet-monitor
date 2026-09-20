@@ -5,6 +5,9 @@ import { authRouter } from "./routes/auth.js";
 import { devicesRouter } from "./routes/devices.js";
 import { requireAuth } from "./middleware/auth.js";
 import { requireDevice } from "./middleware/deviceAuth.js";
+import { ingestRouter } from "./routes/ingest.js";
+import { redis } from "./redis.js";
+import { errText } from "./errText.js";
 
 const app = express();
 
@@ -12,13 +15,19 @@ app.use(cors({ origin: process.env.CORS_ORIGIN }));
 app.use(express.json());
 
 app.get("/health", async (req, res) => {
-  try {
-    await pool.query("SELECT 1");
-    res.json({ status: "ok", db: "up" });
-  } catch (err) {
-    console.error("Health check: DB unreachable ->", err.message || err.code);
-    res.status(503).json({ status: "degraded", db: "down" });
-  }
+  const [db, cache] = await Promise.all([
+    pool.query("SELECT 1").then(() => "up").catch((err) => {
+      console.error("Health check: DB unreachable ->", errText(err));
+      return "down";
+    }),
+    redis.ping().then(() => "up").catch((err) => {
+      console.error("Health check: Redis unreachable ->", errText(err));
+      return "down";
+    }),
+  ]);
+
+  const ok = db === "up" && cache === "up";
+  res.status(ok ? 200 : 503).json({ status: ok ? "ok" : "degraded", db, redis: cache });
 });
 
 // human-facing routes: JWT
@@ -43,8 +52,10 @@ app.get("/device/whoami", requireDevice, (req, res) => {
   res.json({ device: req.device });
 });
 
+app.use("/ingest", requireDevice, ingestRouter);
+
 app.use((err, req, res, _next) => {
-  console.error("Unhandled error:", err.message || err.code);
+  console.error("Unhandled error:", errText(err));
   res.status(500).json({ error: "internal server error" });
 });
 
