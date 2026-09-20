@@ -123,7 +123,7 @@ async function handleBatch(messages) {
     const acked = await stream.xAck(TELEMETRY_STREAM, CONSUMER_GROUP, ackIds);
     const duplicate = doneIds.length - inserted;
     console.log(
-      `Consumer: ${doneIds.length} written, ${duplicate} duplicate, ${dropIds.length + poisonIds.length} dropped, ${acked} acked`
+      `Consumer: ${inserted} written, ${duplicate} duplicate, ${dropIds.length + poisonIds.length} dropped, ${acked} acked`
     );
   }
 }
