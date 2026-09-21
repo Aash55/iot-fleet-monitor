@@ -38,6 +38,7 @@ try {
       count: { type: "string", default: "0" },        // 0 = hamesha chalta rahe
       url: { type: "string" },                        // default = fleet.base_url
       anomaly: { type: "boolean", default: false },
+      quiet: { type: "boolean", default: false },
       remote: { type: "boolean", default: false },
       "dry-run": { type: "boolean", default: false },
     },
@@ -148,6 +149,7 @@ console.log(`devices       : ${DEVICE_COUNT} / ${MAX_DEVICES}`);
 console.log(`rate          : har device har ${RATE_SEC}s`);
 console.log(`count         : ${COUNT === 0 ? "infinite (Ctrl-C se ruko)" : COUNT + " round"}`);
 console.log(`anomaly mode  : ${values.anomaly ? "ON" : "off"}`);
+console.log(`quiet mode    : ${values.quiet ? "ON" : "off"}`);
 console.log(`attack ratio  : ${(ATTACK_RATIO * 100).toFixed(0)}%`);
 console.log(`samples       : ${samples.benign.length} benign + ${samples.attack.length} attack, ${samples.features.length} feature`);
 for (const d of DEVICES) console.log(`  device ${d.id}  ${d.name}  ${maskKey(d.api_key)}`);
@@ -217,7 +219,9 @@ async function sendOne(device) {
     stats[kind]++;
     stats.totalMs += ms;
     const tag = kind === "attack" ? "ATTACK" : "benign";
+    if(kind === "attack" || !values.quiet){
     console.log(`${clock()}  ${device.name}  ${tag}  ${row.label.padEnd(24)} 202  ${stream_id}  ${ms}ms`);
+    }
   } catch (err) {
     // API band  -> TypeError "fetch failed", asli wajah err.cause.code = ECONNREFUSED
     // API atki  -> err.name = TimeoutError
