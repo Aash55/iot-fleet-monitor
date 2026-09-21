@@ -10,7 +10,8 @@
     "consumer": "node --watch --env-file=.env src/worker.js",
     "consumer:start": "node src/worker.js",
     "provision": "node --env-file=.env scripts/provision.js",
-    "extract": "node scripts/extract.js"
+    "extract": "node scripts/extract.js",
+    "simulate": "node scripts/simulate.js"
   },
   "keywords": [],
   "author": "",
