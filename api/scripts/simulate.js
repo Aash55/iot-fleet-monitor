@@ -1,15 +1,18 @@
-// api/scripts/simulate.js   <-- ye f-step 3.1 pe api/scripts/ mein daalni hai
+// api/scripts/simulate.js   <-- ye f-step 3.2 pe api/scripts/ mein daalni hai (3.1 wali file REPLACE)
 //
 // Kaam: sim device ban ke asli CICIoT2023 rows ko POST /ingest pe bhejna.
-// Ye file DO hisson mein ban rahi hai:
-//   f-step 3.1 (ABHI) -> config + file load + row chunna + --dry-run self-check
-//   f-step 3.2 (agla) -> asli bhejne wala loop + Ctrl-C shutdown + stats
+//   f-step 3.1 -> config + file load + row chunna + --dry-run self-check
+//   f-step 3.2 -> asli bhejne wala loop + Ctrl-C shutdown + summary   (section 8-10)
 //
 // Chalane ka tareeka (Git Bash, api/ folder se):
-//   npm run simulate -- --dry-run
+//   npm run simulate -- --count 5          -> har device 5 POST, phir khud band
+//   node scripts/simulate.js               -> hamesha chalta rahe, Ctrl-C se band
+//   Ctrl-C wala run SEEDHA node se. npm beech mein ho to wo Ctrl-C ko child pe aage bhejta hai,
+//   aur Windows pe ye 'aage bhejna' zabardasti kill hai - summary kat sakti hai.
 
 import { readFile } from "node:fs/promises";
 import { parseArgs } from "node:util";
+import { setTimeout as sleep } from "node:timers/promises";
 import path from "node:path";
 
 // ---------------- 1. Tuning constants ----------------
@@ -18,6 +21,9 @@ import path from "node:path";
 // lagega. Isliye default mein sirf 3% attack. --anomaly demo ke liye hai.
 const ATTACK_RATIO_NORMAL = 0.03;
 const ATTACK_RATIO_ANOMALY = 0.4;
+
+// API atak jaaye (jawab hi na de) to ek POST max itna rukega, phir FAIL gina jaayega.
+const REQUEST_TIMEOUT_MS = 5000;
 
 const FLEET_FILE = path.join(import.meta.dirname, "fleet.local.json");
 const SAMPLES_FILE = path.join(import.meta.dirname, "samples.local.json");
@@ -176,4 +182,99 @@ if (DRY_RUN) {
   process.exit(1);
 }
 
-console.log("\nBhejne wala loop f-step 3.2 mein aayega. Abhi ke liye:  npm run simulate -- --dry-run");
+// ---------------- 8. Ek POST (f-step 3.2) ----------------
+const stop = new AbortController();   // Ctrl-C -> stop.abort() -> saari neend turant tootti hai
+const stats = { ok: 0, fail: 0, benign: 0, attack: 0, totalMs: 0, reasons: {} };
+
+function clock() {
+  return new Date().toTimeString().slice(0, 8);   // "11:42:05" - tera local time, sirf insaan ke liye
+}
+
+function failed(device, reason) {
+  stats.fail++;
+  stats.reasons[reason] = (stats.reasons[reason] || 0) + 1;
+  console.log(`${clock()}  ${device.name}  FAIL    ${reason}`);
+}
+
+async function sendOne(device) {
+  const { row, kind } = pickRow();
+  const t0 = Date.now();
+  try {
+    const res = await fetch(`${BASE}/ingest`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-API-Key": device.api_key },
+      body: JSON.stringify(buildBody(row)),
+      // SIRF timeout wala signal. Ctrl-C wala `stop.signal` yahan JAAN-BOOJH KE nahi:
+      // jo POST nikal chuka hai use poora hone do, beech mein kaatna nahi.
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+    const text = await res.text();
+    if (res.status !== 202) return failed(device, `HTTP ${res.status} ${text.slice(0, 80)}`);
+
+    const { stream_id } = JSON.parse(text);
+    const ms = Date.now() - t0;
+    stats.ok++;
+    stats[kind]++;
+    stats.totalMs += ms;
+    const tag = kind === "attack" ? "ATTACK" : "benign";
+    console.log(`${clock()}  ${device.name}  ${tag}  ${row.label.padEnd(24)} 202  ${stream_id}  ${ms}ms`);
+  } catch (err) {
+    // API band  -> TypeError "fetch failed", asli wajah err.cause.code = ECONNREFUSED
+    // API atki  -> err.name = TimeoutError
+    failed(device, err.cause?.code || err.name || "network error");
+  }
+}
+
+// ---------------- 9. Har device ka apna loop ----------------
+// true = poora so liya, false = Ctrl-C ne neend tod di
+async function pause(ms) {
+  try {
+    await sleep(ms, undefined, { signal: stop.signal });
+    return true;
+  } catch (err) {
+    if (err.name === "AbortError") return false;
+    throw err;
+  }
+}
+
+async function runDevice(device) {
+  // Pehla POST 0 se RATE_SEC ke beech kabhi bhi, taaki saare device ek hi pal pe na bhejein.
+  if (!(await pause(Math.random() * RATE_SEC * 1000))) return;
+
+  for (let round = 1; COUNT === 0 || round <= COUNT; round++) {
+    if (stop.signal.aborted) return;
+    await sendOne(device);                        // pehle ye POST KHATAM...
+    if (round === COUNT) return;                  // (aakhri round ke baad sona bekaar)
+    if (!(await pause(RATE_SEC * 1000))) return;  // ...PHIR agle ka intezaar. setInterval nahi.
+  }
+}
+
+// ---------------- 10. Ctrl-C + summary ----------------
+process.on("SIGINT", () => {
+  // Ek hi Ctrl-C ki doosri copy aa sakti hai (npm bhi child ko aage bhejta hai). Doosri copy ignore.
+  if (stop.signal.aborted) return;
+  console.log(`\nCtrl-C mila: naye POST band. Chal rahe POST ko max ${REQUEST_TIMEOUT_MS / 1000}s...`);
+  stop.abort();
+  // Safety net: kuch atak bhi jaaye to tay waqt pe band. unref() = ye timer khud process ko
+  // zinda nahi rakhta - sab theek raha to process isse pehle hi nikal jaayega.
+  setTimeout(() => {
+    console.error("Shutdown atak gaya - zabardasti band");
+    process.exit(1);
+  }, REQUEST_TIMEOUT_MS + 2000).unref();
+});
+
+const startedAt = Date.now();
+console.log(`\nChalu: ${DEVICE_COUNT} device -> ${BASE}/ingest` + (COUNT === 0 ? "   (Ctrl-C se band)" : ""));
+await Promise.all(DEVICES.map(runDevice));
+
+const sent = stats.ok + stats.fail;
+console.log("\n--- summary ---");
+console.log(`bheje       : ${sent}   (202 ok: ${stats.ok}, fail: ${stats.fail})`);
+console.log(`mix         : ${stats.benign} benign, ${stats.attack} attack`);
+console.log(`avg latency : ${stats.ok ? Math.round(stats.totalMs / stats.ok) + " ms" : "-"}`);
+for (const [reason, n] of Object.entries(stats.reasons)) console.log(`fail reason : ${reason}  x${n}`);
+console.log(`chala       : ${((Date.now() - startedAt) / 1000).toFixed(1)}s`);
+if (stats.ok) console.log(`DB check    : consumer chal raha hai to readings theek +${stats.ok} badhni chahiye`);
+
+// exit code: 0 = sab 202, 1 = kuch fail. process.exit() nahi - process khud saaf nikalta hai.
+process.exitCode = stats.fail > 0 ? 1 : 0;
