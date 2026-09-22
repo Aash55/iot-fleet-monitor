@@ -1,5 +1,8 @@
+# .gitignore  -> ye f-step F3 pe daalni hai (P6.1: .env.*.local wali line nayi)
 node_modules/
 .env
+# P6.1: cloud (Neon + Upstash) ke secrets - .env.prod.local jaisi files kabhi commit nahi
+.env.*.local
 data/
 .venv/
 __pycache__/
