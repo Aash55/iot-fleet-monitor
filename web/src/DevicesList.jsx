@@ -1,4 +1,4 @@
-// web/src/DevicesList.jsx  -> ye f-step 3 pe daalni hai (P3.3: naam ab detail page ka link)
+// web/src/DevicesList.jsx  -> ye P3.4 step 2 pe daalni hai (poori file replace; sirf 3 UI text English hue)
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -74,7 +74,7 @@ export default function DevicesList({ token, onAuthError }) {
       await navigator.clipboard.writeText(revealed.api_key)
       setCopyNote('Copied.')
     } catch {
-      setCopyNote('Copy blocked - key ko select karke manually copy karo.')
+      setCopyNote('Copy was blocked. Select the key and copy it by hand.')
     }
   }
 
@@ -109,8 +109,8 @@ export default function DevicesList({ token, onAuthError }) {
       {revealed && (
         <div role="alert" className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-4">
           <p className="text-sm font-medium text-amber-900">
-            "{revealed.name}" ban gaya. Ye API key sirf ab dikhegi - server ke paas
-            iska hash hai, key nahi. Kho gayi to naya device banana padega.
+            "{revealed.name}" was created. This API key is shown only once: the server
+            stores its hash, not the key. If you lose it, create a new device.
           </p>
           <code className="block break-all rounded border border-amber-200 bg-white px-3 py-2 font-mono text-xs">
             {revealed.api_key}
@@ -144,7 +144,7 @@ export default function DevicesList({ token, onAuthError }) {
 
       {devices.length === 0 && !loadError ? (
         <p className="rounded-lg border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">
-          Abhi koi device nahi hai. Upar wale form se pehla device banao.
+          No devices yet. Use the form above to add your first one.
         </p>
       ) : (
         <ul className="divide-y divide-slate-200 rounded-lg border border-slate-200 bg-white">

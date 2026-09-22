@@ -1,4 +1,4 @@
-// web/src/DeviceDetail.jsx  -> ye f-step 3 pe daalni hai (P3.3, nayi file)
+// web/src/DeviceDetail.jsx  -> ye P3.4 step 2 pe daalni hai (poori file replace; khaali Metric dropdown chhupaya)
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
@@ -102,21 +102,23 @@ export default function DeviceDetail({ token, onAuthError }) {
 
       <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <label className="flex items-center gap-2 text-sm font-medium">
-            Metric
-            <select
-              value={metric ?? ''}
-              onChange={(event) => setPicked(event.target.value)}
-              disabled={names.length === 0}
-              className="rounded border border-slate-300 px-2 py-1 text-sm"
-            >
-              {names.map((name) => (
-                <option key={name} value={name}>{name}</option>
-              ))}
-            </select>
-          </label>
+          {/* P3.4 step 2: readings na hon to metric ka koi naam hi nahi -> khaali dropdown mat dikhao */}
+          {names.length > 0 && (
+            <label className="flex items-center gap-2 text-sm font-medium">
+              Metric
+              <select
+                value={metric}
+                onChange={(event) => setPicked(event.target.value)}
+                className="rounded border border-slate-300 px-2 py-1 text-sm"
+              >
+                {names.map((name) => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
+            </label>
+          )}
           {readingsQuery.dataUpdatedAt > 0 && (
-            <p className="text-xs text-slate-500">
+            <p className="ml-auto text-xs text-slate-500">
               Updated {new Date(readingsQuery.dataUpdatedAt).toLocaleTimeString()}. Refreshes every 5 seconds.
             </p>
           )}
