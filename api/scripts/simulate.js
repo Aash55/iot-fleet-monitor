@@ -220,7 +220,7 @@ async function sendOne(device) {
     stats.totalMs += ms;
     const tag = kind === "attack" ? "ATTACK" : "benign";
     if(kind === "attack" || !values.quiet){
-    console.log(`${clock()}  ${device.name}  ${tag}  ${row.label.padEnd(24)} 202  ${stream_id}  ${ms}ms`);
+      console.log(`${clock()}  ${device.name}  ${tag}  ${row.label.padEnd(24)} 202  ${stream_id}  ${ms}ms`);
     }
   } catch (err) {
     // API band  -> TypeError "fetch failed", asli wajah err.cause.code = ECONNREFUSED
