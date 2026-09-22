@@ -4,11 +4,12 @@ import { Link, useParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { getDevice, getReadings } from './api.js'
 import ReadingsChart from './ReadingsChart.jsx'
-import { formatDateTime, toChartData } from './chartData.js'
+import { formatDateTime, lastWindow, toChartData } from './chartData.js'
 
 const POLL_MS = 5000
 const READINGS_LIMIT = 60 // simulator har 5 s bhejta hai -> 60 readings = ~5 minute
 const DEFAULT_METRIC = 'rate'
+const WINDOW_MS = 10 * 60 * 1000
 
 // 404 = device nahi hai ya tumhara nahi (P3.1). 400 = id number hi nahi (/devices/abc).
 function isNotFound(err) {
@@ -61,6 +62,7 @@ export default function DeviceDetail({ token, onAuthError }) {
   const device = deviceQuery.data
   const readings = readingsQuery.data ?? []
   const latest = readings.at(-1)
+  const shown = lastWindow(readings, WINDOW_MS)
   const names = latest ? Object.keys(latest.metrics).sort() : []
   const metric = names.includes(picked) ? picked : names[0]
   const loadError =
@@ -128,9 +130,9 @@ export default function DeviceDetail({ token, onAuthError }) {
           </p>
         ) : (
           <>
-            <ReadingsChart data={toChartData(readings, metric)} metric={metric} />
+            <ReadingsChart data={toChartData(shown, metric)} metric={metric} />
             <p className="text-xs text-slate-500">
-              Last {readings.length} readings, {formatDateTime(readings[0].ts)} to{' '}
+              Last {shown.length} readings, {formatDateTime(shown[0].ts)} to{' '}
               {formatDateTime(latest.ts)}. Times are in your browser&apos;s time zone.
             </p>
           </>

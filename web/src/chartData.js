@@ -23,3 +23,12 @@ const compact = new Intl.NumberFormat(undefined, { notation: 'compact', maximumF
 export function formatCompact(v) {
   return compact.format(v)
 }
+
+// P3.4 f-step 1 pe daala
+export function lastWindow(readings, windowMs) {
+  if (readings.length === 0) {
+     return readings
+  }
+  const end = Date.parse(readings.at(-1).ts)
+  return readings.filter((r) => (Date.parse(r.ts) >= end - windowMs))
+}
