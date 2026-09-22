@@ -1,3 +1,4 @@
+// api/src/consumer.js  -> ye f-step 5 pe daalni hai (P3.1: sirf touchDevices badla)
 import { pool } from "./db.js";
 import { redis, TELEMETRY_STREAM } from "./redis.js";
 import { errText } from "./errText.js";
@@ -215,8 +216,10 @@ async function touchDevices(rows) {
 
   for (const [deviceId, seen] of latest) {
     // The guard keeps an out-of-order batch from moving last_seen backwards.
+    // P3.1: status ab yahan NAHI likhte - GET /devices use last_seen se nikalta hai.
+    // (status column drop ho chuka hai; ye line rehti to har batch pe error aata.)
     await pool.query(
-      `UPDATE devices SET last_seen = $2, status = 'online'
+      `UPDATE devices SET last_seen = $2
        WHERE id = $1 AND (last_seen IS NULL OR last_seen < $2)`,
       [deviceId, seen]
     );
