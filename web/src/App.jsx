@@ -1,5 +1,7 @@
+// web/src/App.jsx  -> ye f-step 3 pe daalni hai (P3.2: sirf logout pe cache saaf)
 import { useCallback, useEffect, useState } from 'react'
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router'
+import { useQueryClient } from '@tanstack/react-query'
 import { getHealth, getMe } from './api.js'
 import { readToken, saveToken, clearToken } from './auth.js'
 import LoginForm from './LoginForm.jsx'
@@ -14,6 +16,7 @@ export default function App() {
   })
   const navigate = useNavigate()
   const location = useLocation()
+  const queryClient = useQueryClient()
 
   useEffect(() => {
     getHealth()
@@ -21,12 +24,14 @@ export default function App() {
       .catch(() => setApiStatus('API unreachable. Check the browser console.'))
   }, [])
 
-  // Deps khaali: identity stable rehni chahiye, DevicesList ke effect ki dependency hai.
+  // queryClient main.jsx mein ek hi baar banta hai, isliye handleLogout ki identity
+  // stable rehti hai (DevicesList ke effect ki dependency hai).
   // Redirect yahan nahi - session null hote hi RequireAuth khud /login bhej dega.
   const handleLogout = useCallback(() => {
     clearToken()
+    queryClient.clear() // agla user pichhle user ki device list cache se na dekhe
     setSession(null)
-  }, [])
+  }, [queryClient])
 
   // Token from localStorage is only a claim. Ask /me whether the API still accepts it.
   useEffect(() => {

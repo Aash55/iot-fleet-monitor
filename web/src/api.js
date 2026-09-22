@@ -1,3 +1,4 @@
+// web/src/api.js  -> ye f-step 3 pe daalni hai (P3.2: 409 message + deleteDevice)
 const API_URL = import.meta.env.VITE_API_URL
 
 export class ApiError extends Error {
@@ -64,13 +65,28 @@ export async function createDevice(token, name) {
     body: JSON.stringify({ name }),
   })
 
-  if (res.status === 400) {
+  // 400 = naam galat, 409 = ye naam pehle se hai (P3.1 ka UNIQUE). API dono mein
+  // same shape bhejta hai: { error: { name: [message] } }
+  if (res.status === 400 || res.status === 409) {
     const body = await res.json().catch(() => ({}))
-    throw new ApiError(body.error?.name?.[0] ?? 'Device name is not valid.', 400)
+    throw new ApiError(body.error?.name?.[0] ?? 'Device name is not valid.', res.status)
   }
   if (!res.ok) {
     throw new ApiError(`Could not add device: HTTP ${res.status}`, res.status)
   }
 
   return res.json() // { device, api_key }
+}
+
+export async function deleteDevice(token, id) {
+  const res = await fetch(`${API_URL}/devices/${id}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  // 404 = pehle hi hat chuka (jaise doosre tab se). User ka maqsad poora ho gaya,
+  // isliye error nahi - delete idempotent hai.
+  if (res.status === 404) return
+  if (!res.ok) {
+    throw new ApiError(`Could not delete device: HTTP ${res.status}`, res.status)
+  }
 }
