@@ -1,5 +1,6 @@
-// web/src/DevicesList.jsx  -> ye f-step 3 pe daalni hai (P3.2)
+// web/src/DevicesList.jsx  -> ye f-step 3 pe daalni hai (P3.3: naam ab detail page ka link)
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { deleteDevice, getDevices } from './api.js'
 import AddDeviceForm from './AddDeviceForm.jsx'
@@ -150,7 +151,12 @@ export default function DevicesList({ token, onAuthError }) {
           {devices.map((device) => (
             <li key={device.id} className="flex items-center justify-between gap-4 px-4 py-3">
               <div className="min-w-0">
-                <p className="truncate font-medium">{device.name}</p>
+                <Link
+                  to={`/devices/${device.id}`}
+                  className="block truncate font-medium hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+                >
+                  {device.name}
+                </Link>
                 <p className="text-xs text-slate-500">
                   id {device.id} · last seen {formatWhen(device.last_seen)}
                 </p>

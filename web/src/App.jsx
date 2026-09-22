@@ -1,5 +1,5 @@
-// web/src/App.jsx  -> ye f-step 3 pe daalni hai (P3.2: sirf logout pe cache saaf)
-import { useCallback, useEffect, useState } from 'react'
+// web/src/App.jsx  -> ye f-step 3 pe daalni hai (P3.3: /devices/:id route)
+import { Suspense, lazy, useCallback, useEffect, useState } from 'react'
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { getHealth, getMe } from './api.js'
@@ -7,6 +7,11 @@ import { readToken, saveToken, clearToken } from './auth.js'
 import LoginForm from './LoginForm.jsx'
 import DevicesList from './DevicesList.jsx'
 import RequireAuth from './RequireAuth.jsx'
+
+// Recharts bhaari hai (~350 kB). Chart sirf device page pe chahiye, isliye wo page alag
+// file (chunk) mein banta hai aur tabhi download hota hai jab koi device kholo.
+// Devices list ka pehla load halka rehta hai.
+const DeviceDetail = lazy(() => import('./DeviceDetail.jsx'))
 
 export default function App() {
   const [apiStatus, setApiStatus] = useState('Checking API...')
@@ -94,6 +99,17 @@ export default function App() {
                   Signed in{session?.user ? ` as ${session.user.email}` : ', verifying session...'}
                 </p>
                 <DevicesList token={session?.token} onAuthError={handleLogout} />
+              </RequireAuth>
+            }
+          />
+
+          <Route
+            path="/devices/:id"
+            element={
+              <RequireAuth session={session}>
+                <Suspense fallback={<p className="text-sm text-slate-500">Loading device...</p>}>
+                  <DeviceDetail token={session?.token} onAuthError={handleLogout} />
+                </Suspense>
               </RequireAuth>
             }
           />

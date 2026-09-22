@@ -1,4 +1,4 @@
-// web/src/api.js  -> ye f-step 3 pe daalni hai (P3.2: 409 message + deleteDevice)
+// web/src/api.js  -> ye f-step 3 pe daalni hai (P3.3: getDevice + getReadings)
 const API_URL = import.meta.env.VITE_API_URL
 
 export class ApiError extends Error {
@@ -53,6 +53,29 @@ export async function getDevices(token) {
   }
   const { devices } = await res.json()
   return devices
+}
+
+export async function getDevice(token, id) {
+  const res = await fetch(`${API_URL}/devices/${encodeURIComponent(id)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) {
+    throw new ApiError(`Could not load device: HTTP ${res.status}`, res.status)
+  }
+  const { device } = await res.json()
+  return device
+}
+
+export async function getReadings(token, id, limit) {
+  const res = await fetch(
+    `${API_URL}/devices/${encodeURIComponent(id)}/readings?limit=${limit}`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  )
+  if (!res.ok) {
+    throw new ApiError(`Could not load readings: HTTP ${res.status}`, res.status)
+  }
+  const { readings } = await res.json()
+  return readings // P3.1: purana -> naya, ts UTC "...Z"
 }
 
 export async function createDevice(token, name) {
