@@ -1,4 +1,4 @@
-// api/src/app.js  -> ye f-step P6.2-f4 pe daalni hai (f1: noStore + err.status; f4: cors maxAge)
+// api/src/app.js  -> ye f-step P6.3-f2C pe daalni hai (P6.2-f1: noStore + err.status; P6.2-f4: cors maxAge; P6.3-f2C: /status alias)
 import express from "express";
 import cors from "cors";
 import { pool } from "./db.js";
@@ -23,7 +23,7 @@ function noStore(req, res, next) {
   next();
 }
 
-app.get("/health", async (req, res) => {
+async function health(req, res) {
   const [db, cache] = await Promise.all([
     pool.query("SELECT 1").then(() => "up").catch((err) => {
       console.error("Health check: DB unreachable ->", errText(err));
@@ -37,7 +37,13 @@ app.get("/health", async (req, res) => {
 
   const ok = db === "up" && cache === "up";
   res.status(ok ? 200 : 503).json({ status: ok ? "ok" : "degraded", db, redis: cache });
-});
+}
+
+// Same check, two names. /health stays for Render's Health Check Path.
+// The web app calls /status: EasyPrivacy has "||onrender.com/health", so Brave
+// Shields (and uBlock) block /health when it is fetched from another site.
+app.get("/health", health);
+app.get("/status", health);
 
 // human-facing routes: JWT
 app.use("/auth", noStore, authRouter);
