@@ -1,4 +1,4 @@
-// web/src/api.js  -> ye f-step 3 pe daalni hai (P3.3: getDevice + getReadings)
+// web/src/api.js  -> ye f-step P6.3-f2C pe daalni hai (P3.3: getDevice + getReadings; P6.3-f2C: /health -> /status)
 const API_URL = import.meta.env.VITE_API_URL
 
 export class ApiError extends Error {
@@ -9,8 +9,9 @@ export class ApiError extends Error {
   }
 }
 
+// /status, not /health: EasyPrivacy blocks onrender.com/health (Brave Shields).
 export async function getHealth() {
-  const res = await fetch(`${API_URL}/health`)
+  const res = await fetch(`${API_URL}/status`)
   if (res.ok) return 'API ok, database ok'
   if (res.status === 503) return 'API ok, database down'
   return `API error: HTTP ${res.status}`
