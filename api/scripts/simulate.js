@@ -1,4 +1,4 @@
-// api/scripts/simulate.js   <-- ye f-step 3.2 pe api/scripts/ mein daalni hai (3.1 wali file REPLACE)
+// api/scripts/simulate.js   <-- ye f-step P6.3-f3 pe daalni hai (P1 3.1/3.2: simulator; P6.3-f3: --fleet flag)
 //
 // Kaam: sim device ban ke asli CICIoT2023 rows ko POST /ingest pe bhejna.
 //   f-step 3.1 -> config + file load + row chunna + --dry-run self-check
@@ -7,6 +7,7 @@
 // Chalane ka tareeka (Git Bash, api/ folder se):
 //   npm run simulate -- --count 5          -> har device 5 POST, phir khud band
 //   node scripts/simulate.js               -> hamesha chalta rahe, Ctrl-C se band
+//   npm run simulate -- --fleet fleet.prod.local.json --remote --count 10   -> Render wali fleet
 //   Ctrl-C wala run SEEDHA node se. npm beech mein ho to wo Ctrl-C ko child pe aage bhejta hai,
 //   aur Windows pe ye 'aage bhejna' zabardasti kill hai - summary kat sakti hai.
 
@@ -14,6 +15,7 @@ import { readFile } from "node:fs/promises";
 import { parseArgs } from "node:util";
 import { setTimeout as sleep } from "node:timers/promises";
 import path from "node:path";
+import { DEFAULT_FLEET, fleetPath } from "./fleetFile.js";
 
 // ---------------- 1. Tuning constants ----------------
 // Asli fleet mostly BENIGN hoti hai. samples file mein 2000 benign + 2000 attack
@@ -25,11 +27,10 @@ const ATTACK_RATIO_ANOMALY = 0.4;
 // API atak jaaye (jawab hi na de) to ek POST max itna rukega, phir FAIL gina jaayega.
 const REQUEST_TIMEOUT_MS = 5000;
 
-const FLEET_FILE = path.join(import.meta.dirname, "fleet.local.json");
 const SAMPLES_FILE = path.join(import.meta.dirname, "samples.local.json");
 
 // ---------------- 2. CLI flags ----------------
-let values;
+let values, FLEET_FILE;
 try {
   ({ values } = parseArgs({
     options: {
@@ -37,6 +38,7 @@ try {
       rate: { type: "string", default: "5" },         // har device ka gap, seconds
       count: { type: "string", default: "0" },        // 0 = hamesha chalta rahe
       url: { type: "string" },                        // default = fleet.base_url
+      fleet: { type: "string", default: DEFAULT_FLEET }, // scripts/ ke andar, *.local.json
       anomaly: { type: "boolean", default: false },
       quiet: { type: "boolean", default: false },
       remote: { type: "boolean", default: false },
@@ -44,9 +46,10 @@ try {
     },
     strict: true,       // galat flag ya extra shabd -> yahin pakda jaayega
   }));
+  FLEET_FILE = fleetPath(values.fleet);
 } catch (err) {
   console.error(`Flag galat hai: ${err.message}`);
-  console.error("Sahi: npm run simulate -- [--devices 6] [--rate 5] [--count 0] [--anomaly] [--dry-run]");
+  console.error("Sahi: npm run simulate -- [--fleet fleet.local.json] [--devices 6] [--rate 5] [--count 0] [--anomaly] [--dry-run]");
   process.exit(1);
 }
 
@@ -81,11 +84,11 @@ async function loadLocalJson(file, hint) {
   }
 }
 
-const fleet = await loadLocalJson(FLEET_FILE, "Pehle chalao:  npm run provision -- 6");
+const fleet = await loadLocalJson(FLEET_FILE, `Pehle chalao:  provision ... --fleet ${values.fleet}`);
 const samples = await loadLocalJson(SAMPLES_FILE, "Pehle chalao:  npm run extract -- 2000");
 
 if (!Array.isArray(fleet.devices) || fleet.devices.length === 0) {
-  console.error("fleet.local.json mein ek bhi device nahi hai");
+  console.error(`${values.fleet} mein ek bhi device nahi hai`);
   process.exit(1);
 }
 for (const b of ["benign", "attack"]) {
@@ -115,8 +118,11 @@ const IS_LOCAL = host === "127.0.0.1" || host === "localhost" || host === "::1";
 if (!IS_LOCAL && !values.remote) {
   const perDay = Math.round((DEVICE_COUNT * 86400) / RATE_SEC);
   console.error(`Ye local URL nahi hai: ${BASE}`);
-  console.error(`Is rate pe ~${perDay.toLocaleString()} request/din jaayengi.`);
-  console.error("Upstash free ka budget 10,000 request/din hai - wo ghanton mein khatam ho jaayega.");
+  // Har 202 = kam se kam 2 Upstash command (API ka XADD + consumer ka XACK).
+  // Upstash free (docs, 23 Sept 2026): 500K command / MAHINA (~16K/din) - consumer ki
+  // idle polling (BLOCK 5000 = ~12 XREADGROUP/min jab Render jaga ho) bhi isi mein se.
+  console.error(`Is rate pe ~${perDay.toLocaleString()} POST/din = ~${(perDay * 2).toLocaleString()}+ Upstash command/din.`);
+  console.error("Upstash free: 500K command/mahina (~16K/din) - ye budget kuch hi din mein khatam.");
   console.error("Sach mein deployed API pe bhejna hai? ->  --remote --rate 60 --count 50");
   process.exit(1);
 }
@@ -144,6 +150,7 @@ function maskKey(k) {
 
 // ---------------- 6. Config print ----------------
 console.log("--- simulator config ---");
+console.log(`fleet file    : ${values.fleet}`);
 console.log(`base url      : ${BASE}`);
 console.log(`devices       : ${DEVICE_COUNT} / ${MAX_DEVICES}`);
 console.log(`rate          : har device har ${RATE_SEC}s`);

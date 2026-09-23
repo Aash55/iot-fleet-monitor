@@ -1,22 +1,42 @@
-// api/scripts/provision.js  -> ye f-step 1 pe daalni hai
+// api/scripts/provision.js  -> ye f-step P6.3-f3 pe daalni hai (P1: pehli baar; P6.3-f3: --fleet flag)
 // N simulator device banata hai aur unki API key ek gitignored file mein likh deta hai.
-// Chalane ka tareeka (Git Bash, api/ folder se):   npm run provision -- 6
+// Chalane ka tareeka (Git Bash, api/ folder se):
+//   npm run provision -- 6                                  -> local API, scripts/fleet.local.json
+//   node --env-file=.env.provision.local scripts/provision.js 3 --fleet fleet.prod.local.json
 import { access, writeFile } from "node:fs/promises";
-import path from "node:path";
+import { parseArgs } from "node:util";
+import { DEFAULT_FLEET, fleetPath } from "./fleetFile.js";
 
 const BASE = process.env.PROVISION_API_URL || `http://127.0.0.1:${process.env.PORT || 4000}`;
 const EMAIL = process.env.PROVISION_EMAIL;
 const PASSWORD = process.env.PROVISION_PASSWORD;
-const COUNT = Number(process.argv[2] || 6);
-const FORCE = process.argv.includes("--force");
-const OUT = path.join(import.meta.dirname, "fleet.local.json");
+
+let values, positionals, OUT;
+try {
+  ({ values, positionals } = parseArgs({
+    options: {
+      force: { type: "boolean", default: false },
+      fleet: { type: "string", default: DEFAULT_FLEET },
+    },
+    allowPositionals: true, // device count: "6"
+    strict: true,           // galat flag -> yahin pakda jaayega
+  }));
+  if (positionals.length > 1) throw new Error(`sirf ek number chahiye, mila: ${positionals.join(" ")}`);
+  OUT = fleetPath(values.fleet);
+} catch (err) {
+  console.error(`Flag galat hai: ${err.message}`);
+  console.error("Sahi: npm run provision -- [6] [--fleet fleet.local.json] [--force]");
+  process.exit(1);
+}
+const COUNT = Number(positionals[0] ?? 6);
+const FORCE = values.force;
 
 if (!EMAIL || !PASSWORD) {
   console.error("Missing env variables: PROVISION_EMAIL, PROVISION_PASSWORD");
   process.exit(1);
 }
 if (!Number.isInteger(COUNT) || COUNT < 1 || COUNT > 50) {
-  console.error(`Device count 1-50 hona chahiye, mila: ${process.argv[2]}`);
+  console.error(`Device count 1-50 hona chahiye, mila: ${positionals[0]}`);
   process.exit(1);
 }
 
@@ -28,10 +48,10 @@ try {
   if (!FORCE) {
     console.error(`Pehle se maujood: ${OUT}`);
     console.error("Dobara chalane se usme rakhi API keys HAMESHA ke liye chali jaayengi.");
-    console.error("Sach mein nayi fleet chahiye? ->  npm run provision -- 6 --force");
+    console.error(`Sach mein nayi fleet chahiye? ->  provision ${COUNT} --fleet ${values.fleet} --force`);
     process.exit(1);
   }
-  console.log("--force: purani fleet.local.json overwrite ho jaayegi");
+  console.log(`--force: purani ${values.fleet} overwrite ho jaayegi`);
 } catch (err) {
   if (err.code !== "ENOENT") throw err;   // file nahi hai = normal, baaki error asli hai
 }
@@ -49,6 +69,9 @@ async function post(pathname, body, token) {
   if (!res.ok) throw new Error(`POST ${pathname} -> ${res.status} ${text}`);
   return JSON.parse(text);
 }
+
+// Target PEHLE dikhao: local ya Render - galat jagah device ban jaaye to pata chale.
+console.log(`API: ${BASE}   fleet file: ${OUT}`);
 
 const stamp = new Date().toISOString().slice(0, 19).replace(/[-:T]/g, "");
 
