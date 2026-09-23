@@ -1,4 +1,4 @@
-// web/src/api.js  -> ye f-step P6.3-f2C pe daalni hai (P3.3: getDevice + getReadings; P6.3-f2C: /health -> /status)
+// web/src/api.js  -> ye f-step P6.3-f4 pe daalni hai (P3.3: getDevice + getReadings; P6.3-f2C: /health -> /status; P6.3-f4: getHealth sirf asli JSON "ok" = ok)
 const API_URL = import.meta.env.VITE_API_URL
 
 export class ApiError extends Error {
@@ -10,9 +10,13 @@ export class ApiError extends Error {
 }
 
 // /status, not /health: EasyPrivacy blocks onrender.com/health (Brave Shields).
+// 200 is not enough: a wrong URL can return an HTML page with 200 (lesson 10).
+// "ok" only when the body is our JSON and says status "ok".
 export async function getHealth() {
   const res = await fetch(`${API_URL}/status`)
-  if (res.ok) return 'API ok, database ok'
+  const isJson = res.headers.get('content-type')?.includes('application/json')
+  const body = isJson ? await res.json().catch(() => null) : null
+  if (res.ok && body?.status === 'ok') return 'API ok, database ok'
   if (res.status === 503) return 'API ok, database down'
   return `API error: HTTP ${res.status}`
 }
