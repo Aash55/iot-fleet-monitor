@@ -1,4 +1,4 @@
-// api/src/app.js  -> ye f-step P6.2-f1 pe daalni hai (noStore + error handler err.status)
+// api/src/app.js  -> ye f-step P6.2-f4 pe daalni hai (f1: noStore + err.status; f4: cors maxAge)
 import express from "express";
 import cors from "cors";
 import { pool } from "./db.js";
@@ -12,7 +12,7 @@ import { errText } from "./errText.js";
 
 const app = express();
 
-app.use(cors({ origin: process.env.CORS_ORIGIN }));
+app.use(cors({ origin: process.env.CORS_ORIGIN, maxAge: 600 }));
 app.use(express.json());
 
 // Private data (JWT, devices, readings) must never be written to the browser's disk
