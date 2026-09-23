@@ -1,3 +1,4 @@
+// api/src/server.js  -> ye f-step P6.2-f1 pe daalni hai (boot timeout 5000 -> 8000)
 import app from "./app.js";
 import { redis } from "./redis.js";
 import { errText } from "./errText.js";
@@ -13,7 +14,10 @@ if (missing.length) {
 // Fail fast: if Redis is down at boot, /ingest can only 500. Better to not start.
 // connect() alone is NOT enough: node-redis retries a dead socket forever, so an
 // un-raced connect() hangs the boot silently. Race it against a hard deadline.
-const REDIS_BOOT_TIMEOUT_MS = 5000;
+// 8000, not 5000: node-redis has its own 5000 ms connect timeout. Ours must lose
+// that race, so node-redis prints its real reason ("Connection timeout") first.
+// Render free has no shell - these log lines are all we get.
+const REDIS_BOOT_TIMEOUT_MS = 8000;
 try {
   await Promise.race([
     redis.connect(),
