@@ -1,4 +1,4 @@
-// api/src/model.js  -> ye f-step P5-f2 pe daalni hai (P5-f1: loadModel; P5-f2: predict)
+// api/src/model.js  -> ye f-step P7-f4a-fix pe daalni hai (P5-f1: loadModel; P5-f2: predict; P7-f4a-fix: proba 0..1 clamp)
 //
 // Kaam: API process start hote hi ml/model.onnx EK BAAR load karna, aur /status ko batana
 // ki model "loaded" hai ya "unavailable". P5-f2 mein consumer yahi session har reading pe
@@ -111,7 +111,12 @@ export async function predict(metricsList) {
     const proba = out.probabilities.data; // har row ke 2: [benign, attack]
     const label = out.label.data; // BigInt64Array; tie 0.5 pe 0 (sklearn jaisa)
     idx.forEach((inputRow, j) => {
-      results[inputRow] = { attack_proba: proba[j * 2 + 1], is_attack: label[j] === 1n };
+      // P7-f4a-fix: float32 mein trees ka average kabhi 1 se ZARA upar aata hai (1.0000001 =
+      // float32 mein 1 ke baad agla number). Prod (Render Linux) pe yahi hua: consumer ka
+      // "0..1" check blocked readings DROP kar raha tha. Source pe hi 0..1 mein daba do -
+      // ingest (prevent) aur consumer (detect) dono ko saaf number mile, DB mein bhi.
+      const p = Math.min(1, Math.max(0, proba[j * 2 + 1]));
+      results[inputRow] = { attack_proba: p, is_attack: label[j] === 1n };
     });
   } catch (err) {
     console.error(`Predict failed for ${idx.length} rows:`, errText(err));

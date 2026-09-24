@@ -1,4 +1,4 @@
-// api/src/consumer.js  -> ye f-step P7-f2 pe daalni hai (P3.1: touchDevices; P5-f2: predict; P7-f2: /ingest ka score + action)
+// api/src/consumer.js  -> ye f-step P7-f4a-fix pe daalni hai (P3.1: touchDevices; P5-f2: predict; P7-f2: /ingest ka score + action; P7-f4a-fix: drop log mein value)
 import { pool } from "./db.js";
 import { redis, TELEMETRY_STREAM } from "./redis.js";
 import { errText } from "./errText.js";
@@ -274,7 +274,11 @@ function parseEntry(id, f) {
   let score;
   if (f.attack_proba !== undefined) {
     const p = Number(f.attack_proba);
-    if (!(p >= 0 && p <= 1)) return { ok: false, reason: "attack_proba not in 0..1" };
+    // Check SAKHT hi rehta hai (stream = boundary). P7-f4a-fix: asli value log mein - prod
+    // mein value nahi dikhi thi, isliye wajah dhoondhne mein ek chakkar zyada laga.
+    if (!(p >= 0 && p <= 1)) {
+      return { ok: false, reason: `attack_proba not in 0..1 (${f.attack_proba})` };
+    }
     if (f.is_attack !== "true" && f.is_attack !== "false")
       return { ok: false, reason: "is_attack not true/false" };
     score = { attack_proba: p, is_attack: f.is_attack === "true" };
