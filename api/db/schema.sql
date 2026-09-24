@@ -1,4 +1,4 @@
--- api/db/schema.sql  -> ye f-step 5 pe daalni hai (P3.1)
+-- api/db/schema.sql  -> ye f-step P5-f2 pe daalni hai (P3.1; P5-f2: attack_proba + is_attack)
 -- Sirf NAYE database ke liye (P6 pe Neon). Purane local DB pe CREATE TABLE IF NOT EXISTS
 -- kuch nahi badalta - wahan pgAdmin wali migration (Block B-E) chalti hai.
 CREATE TABLE IF NOT EXISTS users (
@@ -35,6 +35,9 @@ CREATE TABLE IF NOT EXISTS readings (
   ts          TIMESTAMPTZ NOT NULL,   -- device clock
   received_at TIMESTAMPTZ NOT NULL,   -- API clock at /ingest
   metrics     JSONB       NOT NULL,
+  -- P5-f2: model ka score. NULL = score nahi hua (model unavailable / feature gayab).
+  attack_proba REAL,                  -- float32, wahi jo ONNX ne diya
+  is_attack    BOOLEAN,               -- ONNX label (tie 0.5 -> false, sklearn jaisa)
   inserted_at TIMESTAMPTZ NOT NULL DEFAULT now()  -- consumer clock
 );
 
