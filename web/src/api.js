@@ -1,4 +1,4 @@
-// web/src/api.js  -> ye f-step P6.3-f4 pe daalni hai (P3.3: getDevice + getReadings; P6.3-f2C: /health -> /status; P6.3-f4: getHealth sirf asli JSON "ok" = ok)
+// web/src/api.js  -> ye f-step P7-f4b pe daalni hai (P3.3: getDevice + getReadings; P6.3-f2C: /health -> /status; P6.3-f4: getHealth sirf asli JSON "ok" = ok; P7-f4b: setDeviceMode)
 const API_URL = import.meta.env.VITE_API_URL
 
 export class ApiError extends Error {
@@ -104,6 +104,24 @@ export async function createDevice(token, name) {
   }
 
   return res.json() // { device, api_key }
+}
+
+// P7-f4b: detect <-> prevent (API P7-f1 ka PATCH). Jawab mein poora naya device aata hai
+// (RETURNING), isliye alag GET ki zaroorat nahi. 404 = device nahi / tumhara nahi.
+export async function setDeviceMode(token, id, mode) {
+  const res = await fetch(`${API_URL}/devices/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ mode }),
+  })
+  if (!res.ok) {
+    throw new ApiError(`Could not change mode: HTTP ${res.status}`, res.status)
+  }
+  const { device } = await res.json()
+  return device
 }
 
 export async function deleteDevice(token, id) {

@@ -1,10 +1,12 @@
-// web/src/DeviceDetail.jsx  -> ye f-step P5-f4 pe daalni hai (P3.4 step 2; P5-f4: AttackBadge + attack note)
+// web/src/DeviceDetail.jsx  -> ye f-step P7-f4b pe daalni hai (P3.4 step 2; P5-f4: AttackBadge + attack note; P7-f4b: mode toggle + BlockedBadge + ✕ note)
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { getDevice, getReadings } from './api.js'
 import ReadingsChart from './ReadingsChart.jsx'
 import AttackBadge from './AttackBadge.jsx'
+import BlockedBadge from './BlockedBadge.jsx'
+import ModeToggle from './ModeToggle.jsx'
 import { formatDateTime, lastWindow, toChartData } from './chartData.js'
 
 const POLL_MS = 5000
@@ -20,6 +22,7 @@ function isNotFound(err) {
 export default function DeviceDetail({ token, onAuthError }) {
   const { id } = useParams()
   const [picked, setPicked] = useState(DEFAULT_METRIC)
+  const queryClient = useQueryClient()
 
   // Dono query P3.2 jaisi: har 5 s poll, retry nahi (polling khud retry hai).
   const deviceQuery = useQuery({
@@ -40,6 +43,17 @@ export default function DeviceDetail({ token, onAuthError }) {
   useEffect(() => {
     if (authFailed) onAuthError()
   }, [authFailed, onAuthError])
+
+  // P7-f4b: PATCH ka jawab (naya device) seedha cache mein. Pehle chalu poll roko - warna jo
+  // GET PATCH se pehle nikla tha wo purana mode laa ke naya mita deta (DevicesList jaisa).
+  // List ka cache bhi - wapas jaane pe list mein purana mode na dikhe.
+  async function handleModeChanged(updated) {
+    await queryClient.cancelQueries({ queryKey: ['device', id] })
+    queryClient.setQueryData(['device', id], updated)
+    queryClient.setQueryData(['devices'], (list) =>
+      list?.map((d) => (d.id === updated.id ? updated : d))
+    )
+  }
 
   if (authFailed) return null // logout ho raha hai; RequireAuth /login bhej dega
 
@@ -85,6 +99,7 @@ export default function DeviceDetail({ token, onAuthError }) {
           </div>
           <div className="flex flex-none items-center gap-2">
           <AttackBadge count={device.recent_attacks} />
+          <BlockedBadge count={device.recent_blocked} />
           <span
             className={`flex-none rounded-full px-2.5 py-1 text-xs font-medium ${
               device.status === 'online'
@@ -96,6 +111,15 @@ export default function DeviceDetail({ token, onAuthError }) {
           </span>
           </div>
         </div>
+      )}
+
+      {device && (
+        <ModeToggle
+          token={token}
+          device={device}
+          onChanged={handleModeChanged}
+          onAuthError={onAuthError}
+        />
       )}
 
       {loadError && (
@@ -141,6 +165,7 @@ export default function DeviceDetail({ token, onAuthError }) {
               Last {shown.length} readings, {formatDateTime(shown[0].ts)} to{' '}
               {formatDateTime(latest.ts)}. Times are in your browser&apos;s time zone.
               {' '}Red dots: readings the ML model flagged as an attack.
+              {' '}✕: readings blocked in prevent mode.
             </p>
           </>
         )}

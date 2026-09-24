@@ -1,10 +1,11 @@
-// web/src/DevicesList.jsx  -> ye f-step P5-f4 pe daalni hai (P3.4 step 2; P5-f4: AttackBadge)
+// web/src/DevicesList.jsx  -> ye f-step P7-f4b pe daalni hai (P3.4 step 2; P5-f4: AttackBadge; P7-f4b: prevent chip + BlockedBadge)
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { deleteDevice, getDevices } from './api.js'
 import AddDeviceForm from './AddDeviceForm.jsx'
 import AttackBadge from './AttackBadge.jsx'
+import BlockedBadge from './BlockedBadge.jsx'
 
 // status (online/offline) server har request pe last_seen se nikalta hai (P3.1).
 // Naya status dekhne ka ek hi tareeka hai: list dobara maango. Isliye har 5 s poll.
@@ -163,7 +164,14 @@ export default function DevicesList({ token, onAuthError }) {
                 </p>
               </div>
               <div className="flex flex-none items-center gap-3">
+                {/* P7-f4b: mode badalna device page pe; list pe sirf dikhao ki kaun prevent mein hai */}
+                {device.mode === 'prevent' && (
+                  <span className="rounded-full border border-slate-900 px-2.5 py-1 text-xs font-medium text-slate-900">
+                    prevent
+                  </span>
+                )}
                 <AttackBadge count={device.recent_attacks} />
+                <BlockedBadge count={device.recent_blocked} />
                 <span
                   className={`rounded-full px-2.5 py-1 text-xs font-medium ${
                     device.status === 'online'
