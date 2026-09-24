@@ -1,7 +1,8 @@
-// api/src/consumer.js  -> ye f-step 5 pe daalni hai (P3.1: sirf touchDevices badla)
+// api/src/consumer.js  -> ye f-step P5-f2 pe daalni hai (P3.1: touchDevices; P5-f2: predict per reading)
 import { pool } from "./db.js";
 import { redis, TELEMETRY_STREAM } from "./redis.js";
 import { errText } from "./errText.js";
+import { predict } from "./model.js";
 
 export const CONSUMER_GROUP = process.env.CONSUMER_GROUP || "telemetry-writers";
 
@@ -137,6 +138,14 @@ async function handleBatch(messages) {
     }
   }
 
+  // P5-f2: poore batch ka ek predict call. Score reading ke saath HI likhte hain (same INSERT),
+  // to reading aur uska score kabhi alag-alag nahi ho sakte.
+  const preds = await predict(rows.map((r) => r.metricsObj));
+  rows.forEach((r, i) => {
+    r.attack_proba = preds[i]?.attack_proba ?? null;
+    r.is_attack = preds[i]?.is_attack ?? null;
+  });
+
   const { doneIds, poisonIds, inserted} = rows.length
     ? await insertReadings(rows)
     : { doneIds: [], poisonIds: [], inserted: 0 };
@@ -148,8 +157,10 @@ async function handleBatch(messages) {
   if (ackIds.length) {
     const acked = await stream.xAck(TELEMETRY_STREAM, CONSUMER_GROUP, ackIds);
     const duplicate = doneIds.length - inserted;
+    const attacks = rows.filter((r) => r.is_attack).length;
+    const unscored = rows.filter((r) => r.is_attack === null).length;
     console.log(
-      `Consumer: ${inserted} written, ${duplicate} duplicate, ${dropIds.length + poisonIds.length} dropped, ${acked} acked`
+      `Consumer: ${inserted} written, ${duplicate} duplicate, ${dropIds.length + poisonIds.length} dropped, ${acked} acked | model: ${attacks} attack, ${unscored} unscored`
     );
   }
 }
@@ -190,15 +201,20 @@ async function insertMany(rows) {
   const tuples = [];
   const params = [];
   rows.forEach((r, i) => {
-    const b = i * 6;
-    tuples.push(`($${b + 1}, $${b + 2}, $${b + 3}, $${b + 4}, $${b + 5}, $${b + 6})`);
-    params.push(r.stream_id, r.device_id, r.owner_id, r.ts, r.received_at, r.metrics);
+    const b = i * 8;
+    const ph = Array.from({ length: 8 }, (_, j) => `$${b + j + 1}`);
+    tuples.push(`(${ph.join(", ")})`);
+    params.push(
+      r.stream_id, r.device_id, r.owner_id, r.ts, r.received_at, r.metrics,
+      r.attack_proba, r.is_attack
+    );
   });
 
   // ON CONFLICT DO NOTHING on stream_id is what turns at-least-once delivery into
   // exactly-once storage. Redelivery after a crash becomes a harmless no-op.
   const { rowCount } = await pool.query(
-    `INSERT INTO readings (stream_id, device_id, owner_id, ts, received_at, metrics)
+    `INSERT INTO readings (stream_id, device_id, owner_id, ts, received_at, metrics,
+                           attack_proba, is_attack)
      VALUES ${tuples.join(", ")}
      ON CONFLICT (stream_id) DO NOTHING`,
     params
@@ -256,6 +272,7 @@ function parseEntry(id, f) {
       ts: f.ts,
       received_at: f.received_at,
       metrics: f.metrics, // already a JSON string -> straight into JSONB
+      metricsObj: metrics, // P5-f2: model ke liye parsed copy (DB mein nahi jaati)
     },
   };
 }

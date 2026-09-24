@@ -1,4 +1,4 @@
-// api/src/model.js  -> ye f-step P5-f1 pe daalni hai (NAYI file)
+// api/src/model.js  -> ye f-step P5-f2 pe daalni hai (P5-f1: loadModel; P5-f2: predict)
 //
 // Kaam: API process start hote hi ml/model.onnx EK BAAR load karna, aur /status ko batana
 // ki model "loaded" hai ya "unavailable". P5-f2 mein consumer yahi session har reading pe
@@ -26,6 +26,7 @@ const state = {
 const mb = (bytes) => (bytes / 1024 / 1024).toFixed(1);
 
 export async function loadModel() {
+  if (state.status === "loaded") return; // worker + API dono bulaayen to bhi ek hi baar
   const rssBefore = process.memoryUsage().rss;
   const t0 = performance.now();
   const onnxPath = path.join(ML_DIR, "model.onnx");
@@ -69,4 +70,51 @@ export async function loadModel() {
 
 export function modelStatus() {
   return state.status;
+}
+
+let warnedUnavailable = false;
+
+// P5-f2: ek batch ki saari readings ek hi session.run mein (parity: 800 rows 4.8 ms).
+// Input : metrics objects ki list, jaise [{ flow_duration: 1.2, rate: 30, ... }, ...]
+// Output: HAR input ke liye { attack_proba, is_attack } ya null, same order mein.
+// null = "score nahi hua" (model nahi hai, ya koi feature gayab/number nahi). Reading phir
+// bhi store hoti hai - prediction na hona reading ko rokne ki wajah nahi. Kabhi throw nahi.
+export async function predict(metricsList) {
+  const results = metricsList.map(() => null);
+  if (state.status !== "loaded") {
+    if (!warnedUnavailable) {
+      console.error("Predict: model unavailable - readings bina score ke store hongi");
+      warnedUnavailable = true;
+    }
+    return results;
+  }
+
+  const { features, input } = state.meta;
+  const k = features.length;
+  const idx = []; // kaunsi input rows score hongi (baaki null rahengi)
+  const data = new Float32Array(metricsList.length * k);
+
+  metricsList.forEach((m, i) => {
+    // ORDER model.json se, metrics object ke keys ke order se NAHI. Galat order = model galat
+    // column padhega aur koi error nahi aayega. Ek bhi feature gayab = 0 maan ke guess NAHI.
+    const row = features.map((f) => m[f]);
+    if (!row.every(Number.isFinite)) return;
+    data.set(row, idx.length * k);
+    idx.push(i);
+  });
+  if (idx.length === 0) return results;
+
+  try {
+    const out = await state.session.run({
+      [input]: new state.ort.Tensor("float32", data.subarray(0, idx.length * k), [idx.length, k]),
+    });
+    const proba = out.probabilities.data; // har row ke 2: [benign, attack]
+    const label = out.label.data; // BigInt64Array; tie 0.5 pe 0 (sklearn jaisa)
+    idx.forEach((inputRow, j) => {
+      results[inputRow] = { attack_proba: proba[j * 2 + 1], is_attack: label[j] === 1n };
+    });
+  } catch (err) {
+    console.error(`Predict failed for ${idx.length} rows:`, errText(err));
+  }
+  return results;
 }
