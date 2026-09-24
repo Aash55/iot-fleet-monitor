@@ -1,4 +1,4 @@
--- api/db/schema.sql  -> ye f-step P5-f2 pe daalni hai (P3.1; P5-f2: attack_proba + is_attack)
+-- api/db/schema.sql  -> ye f-step P5-f3 pe daalni hai (P5-f2: attack_proba + is_attack; P5-f3: attack index)
 -- Sirf NAYE database ke liye (P6 pe Neon). Purane local DB pe CREATE TABLE IF NOT EXISTS
 -- kuch nahi badalta - wahan pgAdmin wali migration (Block B-E) chalti hai.
 CREATE TABLE IF NOT EXISTS users (
@@ -43,3 +43,7 @@ CREATE TABLE IF NOT EXISTS readings (
 
 CREATE INDEX IF NOT EXISTS readings_device_ts_idx ON readings (device_id, ts DESC);
 CREATE INDEX IF NOT EXISTS readings_owner_ts_idx  ON readings (owner_id,  ts DESC);
+-- P5-f3: sirf attack wali rows ka chhota (partial) index - GET /devices ka recent_attacks isse
+-- padhta hai. 97% benign rows index mein hoti hi nahi.
+CREATE INDEX IF NOT EXISTS readings_attack_idx ON readings (device_id, received_at DESC)
+  WHERE is_attack;
