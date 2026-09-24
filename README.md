@@ -1,4 +1,4 @@
-<!-- README.md -> ye f-step P6.4-f1 pe daalni hai (P6.4-f2: Screenshots + How to run tests) -->
+<!-- README.md -> ye f-step P6.4-f2 pe daalni hai (f2: diagram top-down + Screenshots; "How to run tests" = ASH) -->
 # IoT Fleet Monitor
 
 Devices send telemetry over HTTP. The API accepts it fast, queues it in a Redis stream,
@@ -10,16 +10,27 @@ live chart. Built solo, deployed on free tiers.
 - **Note:** the API is on Render's free plan and sleeps after 15 minutes without traffic.
   The first request wakes it (see [Cold start](#cold-start-measured-not-guessed)).
 
+## Screenshots
+
+Device page: status badge and the live chart (refreshes every 5 seconds).
+
+![Device page with status and live chart](docs/screenshots/device-chart.png)
+
+Cold start: the API was asleep, so the `/status` request had to wait (see its Time column)
+before the header could say "API ok, database ok".
+
+![Cold start: the /status request in DevTools and the header after the API woke up](docs/screenshots/cold-start.png)
+
 ## Architecture
 
 ```mermaid
-flowchart LR
+flowchart TD
     D["Device / simulator<br/>POST /ingest + x-api-key"] --> API
     B["Browser<br/>React app on Vercel"] -- "JWT: /auth, /devices, /status" --> API
     API["Express API on Render"] -- "XADD telemetry" --> R[("Upstash Redis<br/>stream: telemetry")]
     R -- "XREADGROUP telemetry-writers" --> C["Consumer<br/>same Render process"]
-    C -- "INSERT ... ON CONFLICT (stream_id) DO NOTHING" --> P[("Neon Postgres")]
     C -- "XACK after insert" --> R
+    C -- "INSERT ... ON CONFLICT (stream_id) DO NOTHING" --> P[("Neon Postgres")]
     API -- "SELECT devices, readings" --> P
 ```
 
@@ -104,7 +115,25 @@ Needs Node 24, PostgreSQL and a Redis-compatible server on `127.0.0.1:6379`.
    (JSON body `email`, `password`), for example from Postman. Then log in and add a device.
    `npm run provision` and `npm run simulate` (in `api/`) create devices and send readings.
 
-<!-- P6.4-f2: "How to run tests" section - ASH khud likhega (hint-only) -->
+## How to run tests
+
+Web unit tests use Node's built-in test runner (`node:test`), so there is no extra test
+package. They check `getHealth()` (the header text) against a fake local server, so no
+network and no running API are needed. Five cases: the real JSON "ok" reply, an HTML page
+with status 200, JSON without `status: "ok"`, broken JSON, and a 503.
+
+From the repo root, after `npm ci` in `web/`:
+
+```bash
+cd web
+npm test
+```
+
+Expected: `pass 5` and `fail 0`.
+
+The deployed stack (API on Render, web on Vercel) is checked with Postman collections that
+assert on body content, not only status codes: the JSON health reply, the CORS header and the
+current JavaScript bundle name. These collections are kept outside the repo.
 
 ## What's next
 
