@@ -1,8 +1,10 @@
-// api/scripts/simulate.js   <-- ye f-step P6.3-f3 pe daalni hai (P1 3.1/3.2: simulator; P6.3-f3: --fleet flag)
+// api/scripts/simulate.js   <-- ye f-step P7-f3 pe daalni hai (P1 3.1/3.2: simulator; P6.3-f3: --fleet flag; P7-f3: gateway/PEP)
 //
 // Kaam: sim device ban ke asli CICIoT2023 rows ko POST /ingest pe bhejna.
 //   f-step 3.1 -> config + file load + row chunna + --dry-run self-check
 //   f-step 3.2 -> asli bhejne wala loop + Ctrl-C shutdown + summary   (section 8-10)
+//   P7-f3     -> simulator = GATEWAY (PEP). API (PDP) jawab mein `action` batati hai;
+//                "block" pe yahan BLOCKED chhapta hai aur reading ko "roka" ginta hai.
 //
 // Chalane ka tareeka (Git Bash, api/ folder se):
 //   npm run simulate -- --count 5          -> har device 5 POST, phir khud band
@@ -183,7 +185,7 @@ if (DRY_RUN) {
   if (!/^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/.test(body.ts)) problems.push("ts ISO-8601 nahi hai");
 
   if (problems.length === 0) {
-    console.log("\nSELF-CHECK PASS: label chhupa hua hai, 10 feature hain, sab number hain, ts sahi hai");
+    console.log(`\nSELF-CHECK PASS: label chhupa hua hai, ${samples.features.length} feature hain, sab number hain, ts sahi hai`);
     process.exit(0);
   }
   console.error("\nSELF-CHECK FAIL:");
@@ -193,10 +195,26 @@ if (DRY_RUN) {
 
 // ---------------- 8. Ek POST (f-step 3.2) ----------------
 const stop = new AbortController();   // Ctrl-C -> stop.abort() -> saari neend turant tootti hai
-const stats = { ok: 0, fail: 0, benign: 0, attack: 0, totalMs: 0, reasons: {} };
+const stats = {
+  ok: 0, fail: 0, benign: 0, attack: 0, totalMs: 0, reasons: {},
+  // P7-f3 gateway ginti. `prevent` = kitne jawab prevent-mode device ke aaye.
+  allowed: 0, blocked: 0, blockReasons: {}, prevent: 0, noAction: 0,
+  // Sirf prevent-mode jawab: simulator row ka label JAANTA hai (API nahi), to yahan
+  // naap sakte hain ki gateway ne sahi roka ya galat. Detect mode kabhi rokta hi nahi.
+  prevAttack: 0, prevAttackBlocked: 0, prevBenign: 0, prevBenignBlocked: 0,
+};
+
+function bump(obj, key) {
+  obj[key] = (obj[key] || 0) + 1;
+}
 
 function clock() {
   return new Date().toTimeString().slice(0, 8);   // "11:42:05" - tera local time, sirf insaan ke liye
+}
+
+// attack_proba null ho sakta hai (missing_features / model_unavailable) -> "p=-"
+function fmtP(p) {
+  return typeof p === "number" ? `p=${p.toFixed(2)}` : "p=-";
 }
 
 function failed(device, reason) {
@@ -220,14 +238,42 @@ async function sendOne(device) {
     const text = await res.text();
     if (res.status !== 202) return failed(device, `HTTP ${res.status} ${text.slice(0, 80)}`);
 
-    const { stream_id } = JSON.parse(text);
+    const reply = JSON.parse(text);   // { accepted, mode, action, reason?, attack_proba?, stream_id }
     const ms = Date.now() - t0;
     stats.ok++;
     stats[kind]++;
     stats.totalMs += ms;
     const tag = kind === "attack" ? "ATTACK" : "benign";
-    if(kind === "attack" || !values.quiet){
-      console.log(`${clock()}  ${device.name}  ${tag}  ${row.label.padEnd(24)} 202  ${stream_id}  ${ms}ms`);
+
+    // `action` hi nahi aaya = API f2 se purani hai (deploy nahi hua). Chupchaap "allow" maan
+    // lena galat hoga - ek baar zor se batao, phir gino.
+    if (reply.action !== "allow" && reply.action !== "block") {
+      if (stats.noAction++ === 0) {
+        console.log(`${clock()}  ${device.name}  WARN    jawab mein action nahi - API purani (P7-f2 se pehle)?`);
+      }
+    }
+    if (reply.mode === "prevent") {
+      stats.prevent++;
+      bump(stats, kind === "attack" ? "prevAttack" : "prevBenign");
+    }
+
+    // ---- PEP: faisla API ka, AMAL yahan ----
+    if (reply.action === "block") {
+      stats.blocked++;
+      bump(stats.blockReasons, reply.reason ?? "?");
+      if (reply.mode === "prevent") bump(stats, kind === "attack" ? "prevAttackBlocked" : "prevBenignBlocked");
+      // BLOCKED line quiet mode mein bhi: rokna hamesha dikhna chahiye.
+      console.log(
+        `${clock()}  ${device.name}  BLOCKED ${row.label.padEnd(24)} ${reply.reason} ${fmtP(reply.attack_proba)}  ${ms}ms`
+      );
+      return;   // "roka" = asli gateway yahan reading aage (asli system ko) NAHI bhejta
+    }
+
+    stats.allowed++;
+    // prevent mode mein score bhi dikhao (0.5-0.9 = alert hai par block nahi)
+    const why = reply.mode === "prevent" ? `allow ${fmtP(reply.attack_proba)}` : "allow";
+    if (kind === "attack" || !values.quiet) {
+      console.log(`${clock()}  ${device.name}  ${tag}  ${row.label.padEnd(24)} 202  ${why}  ${ms}ms`);
     }
   } catch (err) {
     // API band  -> TypeError "fetch failed", asli wajah err.cause.code = ECONNREFUSED
@@ -284,6 +330,18 @@ console.log(`bheje       : ${sent}   (202 ok: ${stats.ok}, fail: ${stats.fail})`
 console.log(`mix         : ${stats.benign} benign, ${stats.attack} attack`);
 console.log(`avg latency : ${stats.ok ? Math.round(stats.totalMs / stats.ok) + " ms" : "-"}`);
 for (const [reason, n] of Object.entries(stats.reasons)) console.log(`fail reason : ${reason}  x${n}`);
+// P7-f3: gateway ka hisaab
+console.log(`gateway     : ${stats.allowed} aage gaye (allow), ${stats.blocked} roke (block)`);
+for (const [reason, n] of Object.entries(stats.blockReasons)) console.log(`block reason: ${reason}  x${n}`);
+if (stats.prevent) {
+  console.log(`prevent     : attack ${stats.prevAttack} mein se ${stats.prevAttackBlocked} roke, ` +
+    `${stats.prevAttack - stats.prevAttackBlocked} nikal gaye   (0.5-0.9 = alert, block nahi)`);
+  console.log(`galat block : benign ${stats.prevBenign} mein se ${stats.prevBenignBlocked} roke   (ye 0 hona chahiye)`);
+} else if (stats.ok > stats.noAction) {
+  // (purani API mode batati hi nahi - tab "sab detect" kehna jhooth hota, isliye ye shart)
+  console.log("prevent     : koi device prevent mode mein nahi - sab detect, kuch roka nahi");
+}
+if (stats.noAction) console.log(`WARN        : ${stats.noAction} jawab bina action ke - API purani hai?`);
 console.log(`chala       : ${((Date.now() - startedAt) / 1000).toFixed(1)}s`);
 if (stats.ok) console.log(`DB check    : consumer chal raha hai to readings theek +${stats.ok} badhni chahiye`);
 
