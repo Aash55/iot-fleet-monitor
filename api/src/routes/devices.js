@@ -1,4 +1,4 @@
-// api/src/routes/devices.js  -> ye f-step P5-f3 pe daalni hai (P3.1; P5-f3: recent_attacks + readings mein score)
+// api/src/routes/devices.js  -> ye f-step P7-f1 pe daalni hai (P3.1; P5-f3: recent_attacks + score; P7-f1: mode + PATCH)
 import { Router } from "express";
 import { z } from "zod";
 import { pool } from "../db.js";
@@ -8,6 +8,11 @@ export const devicesRouter = Router();
 
 const deviceInput = z.object({ name: z.string().trim().min(1).max(100) });
 const idParam = z.coerce.number().int().positive();
+
+// P7-f1: PATCH /devices/:id ka body. Sirf ye 2 shabd - baaki sab 400.
+// DB ka CHECK (devices_mode_check) bhi yahi rokta hai; zod pehle rokta hai taaki user ko
+// saaf 400 mile, 500 nahi. Body mein aur kuch (jaise name) aaye to zod use chupchaap hata deta hai.
+const modeInput = z.object({ mode: z.enum(["detect", "prevent"]) });
 
 // ?limit=N. Query string mein sab TEXT aata hai ("50"), isliye coerce.
 // Khaali ?limit= -> Number("") = 0 -> min(1) pakad leta hai. Na bheja -> 100.
@@ -31,7 +36,8 @@ const RECENT_ATTACKS_SQL = `(SELECT count(*)::int FROM readings r
        WHERE r.device_id = devices.id AND r.is_attack
          AND r.received_at > now() - interval '${ALERT_WINDOW}') AS recent_attacks`;
 
-const PUBLIC_COLUMNS = `id, name, ${STATUS_SQL}, last_seen, created_at, ${RECENT_ATTACKS_SQL}`;
+// P7-f1: mode bhi har jagah (list, ek device, POST, PATCH) - web ka toggle (f4) isi se chalega.
+const PUBLIC_COLUMNS = `id, name, mode, ${STATUS_SQL}, last_seen, created_at, ${RECENT_ATTACKS_SQL}`;
 
 // Naam ki uniqueness DB ka constraint enforce karta hai, code nahi.
 // Ye naam schema.sql aur migration dono mein same hai.
@@ -89,6 +95,39 @@ devicesRouter.get("/:id", async (req, res, next) => {
     const { rows } = await pool.query(
       `SELECT ${PUBLIC_COLUMNS} FROM devices WHERE id = $1 AND owner_id = $2`,
       [id.data, req.user.id]
+    );
+    if (!rows[0]) {
+      return res.status(404).json({ error: "device not found" });
+    }
+    res.json({ device: rows[0] });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// P7-f1: device ka mode badlo (detect <-> prevent). PATCH = record ka EK hissa badalna
+// (PUT = poora record badalna). Sirf apna device: WHERE owner_id. Doosre ka device = 404,
+// 403 nahi - "ye device hai" itna bhi pata na chale (GET /:id jaisa hi).
+devicesRouter.patch("/:id", async (req, res, next) => {
+  const id = idParam.safeParse(req.params.id);
+  if (!id.success) {
+    return res.status(400).json({ error: "id must be a positive integer" });
+  }
+  // Body hi na ho (Content-Type JSON nahi) to Express 5 mein req.body = undefined ->
+  // zod fail -> 400. Isliye alag check nahi chahiye.
+  const parsed = modeInput.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: { mode: ['mode must be "detect" or "prevent"'] } });
+  }
+
+  try {
+    // Ek hi query: badlo AUR naya device wapas lo. Pehle SELECT phir UPDATE = 2 chakkar,
+    // aur beech mein koi aur badal de to jawab purana. RETURNING naya (badla hua) row deta hai.
+    const { rows } = await pool.query(
+      `UPDATE devices SET mode = $1
+       WHERE id = $2 AND owner_id = $3
+       RETURNING ${PUBLIC_COLUMNS}`,
+      [parsed.data.mode, id.data, req.user.id]
     );
     if (!rows[0]) {
       return res.status(404).json({ error: "device not found" });
