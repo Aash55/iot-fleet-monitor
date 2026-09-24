@@ -1,9 +1,10 @@
-// web/src/DeviceDetail.jsx  -> ye P3.4 step 2 pe daalni hai (poori file replace; khaali Metric dropdown chhupaya)
+// web/src/DeviceDetail.jsx  -> ye f-step P5-f4 pe daalni hai (P3.4 step 2; P5-f4: AttackBadge + attack note)
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { getDevice, getReadings } from './api.js'
 import ReadingsChart from './ReadingsChart.jsx'
+import AttackBadge from './AttackBadge.jsx'
 import { formatDateTime, lastWindow, toChartData } from './chartData.js'
 
 const POLL_MS = 5000
@@ -82,6 +83,8 @@ export default function DeviceDetail({ token, onAuthError }) {
               id {device.id} · last seen {device.last_seen ? formatDateTime(device.last_seen) : 'never'}
             </p>
           </div>
+          <div className="flex flex-none items-center gap-2">
+          <AttackBadge count={device.recent_attacks} />
           <span
             className={`flex-none rounded-full px-2.5 py-1 text-xs font-medium ${
               device.status === 'online'
@@ -91,6 +94,7 @@ export default function DeviceDetail({ token, onAuthError }) {
           >
             {device.status}
           </span>
+          </div>
         </div>
       )}
 
@@ -136,6 +140,7 @@ export default function DeviceDetail({ token, onAuthError }) {
             <p className="text-xs text-slate-500">
               Last {shown.length} readings, {formatDateTime(shown[0].ts)} to{' '}
               {formatDateTime(latest.ts)}. Times are in your browser&apos;s time zone.
+              {' '}Red dots: readings the ML model flagged as an attack.
             </p>
           </>
         )}

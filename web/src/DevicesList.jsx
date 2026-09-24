@@ -1,9 +1,10 @@
-// web/src/DevicesList.jsx  -> ye P3.4 step 2 pe daalni hai (poori file replace; sirf 3 UI text English hue)
+// web/src/DevicesList.jsx  -> ye f-step P5-f4 pe daalni hai (P3.4 step 2; P5-f4: AttackBadge)
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { deleteDevice, getDevices } from './api.js'
 import AddDeviceForm from './AddDeviceForm.jsx'
+import AttackBadge from './AttackBadge.jsx'
 
 // status (online/offline) server har request pe last_seen se nikalta hai (P3.1).
 // Naya status dekhne ka ek hi tareeka hai: list dobara maango. Isliye har 5 s poll.
@@ -162,6 +163,7 @@ export default function DevicesList({ token, onAuthError }) {
                 </p>
               </div>
               <div className="flex flex-none items-center gap-3">
+                <AttackBadge count={device.recent_attacks} />
                 <span
                   className={`rounded-full px-2.5 py-1 text-xs font-medium ${
                     device.status === 'online'
