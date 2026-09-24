@@ -1,4 +1,4 @@
-// api/src/routes/devices.js  -> ye f-step 5 pe daalni hai (P3.1)
+// api/src/routes/devices.js  -> ye f-step P5-f3 pe daalni hai (P3.1; P5-f3: recent_attacks + readings mein score)
 import { Router } from "express";
 import { z } from "zod";
 import { pool } from "../db.js";
@@ -21,7 +21,17 @@ const readingsQuery = z.object({
 const STATUS_SQL = `CASE WHEN last_seen > now() - interval '2 minutes'
        THEN 'online' ELSE 'offline' END AS status`;
 
-const PUBLIC_COLUMNS = `id, name, ${STATUS_SQL}, last_seen, created_at`;
+// P5-f3: "alert" = pichhle 15 min mein model ne kitni readings ko attack kaha. Alag alerts
+// table NAHI (acknowledge/resolve jaisa state MVP mein nahi) - readings se hi ginti.
+// received_at (API ki ghadi), ts (device ki ghadi) NAHI: device ka clock galat ya jhootha ho
+// sakta hai; last_seen bhi received_at se hi banta hai. NULL score (unscored) attack nahi ginta.
+// Subquery ka `devices.id` bahar wali devices row hai - isliye har query mein FROM devices.
+const ALERT_WINDOW = "15 minutes";
+const RECENT_ATTACKS_SQL = `(SELECT count(*)::int FROM readings r
+       WHERE r.device_id = devices.id AND r.is_attack
+         AND r.received_at > now() - interval '${ALERT_WINDOW}') AS recent_attacks`;
+
+const PUBLIC_COLUMNS = `id, name, ${STATUS_SQL}, last_seen, created_at, ${RECENT_ATTACKS_SQL}`;
 
 // Naam ki uniqueness DB ka constraint enforce karta hai, code nahi.
 // Ye naam schema.sql aur migration dono mein same hai.
@@ -115,7 +125,8 @@ devicesRouter.get("/:id/readings", async (req, res, next) => {
     // 2) Latest N. Index readings_device_ts_idx (device_id, ts DESC) isi ORDER BY ke
     //    liye bana hai. owner_id yahan dobara = defence in depth.
     const { rows } = await pool.query(
-      `SELECT id, ts, metrics FROM readings
+      // P5-f3: score bhi bhejo - chart attack wale points alag rang mein dikhayega (f4).
+      `SELECT id, ts, metrics, attack_proba, is_attack FROM readings
        WHERE device_id = $1 AND owner_id = $2
        ORDER BY ts DESC
        LIMIT $3`,
