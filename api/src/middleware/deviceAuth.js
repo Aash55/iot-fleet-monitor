@@ -1,3 +1,4 @@
+// api/src/middleware/deviceAuth.js  -> ye f-step P7-f2 pe daalni hai (P7-f2: mode bhi padho)
 import { pool } from "../db.js";
 import { hashApiKey } from "../apiKey.js";
 
@@ -9,7 +10,9 @@ export async function requireDevice(req, res, next) {
 
   try {
     const { rows } = await pool.query(
-      "SELECT id, owner_id, name FROM devices WHERE api_key_hash = $1",
+      // P7-f2: mode bhi - /ingest isi se tay karta hai ki wahin score + faisla karna hai ya nahi.
+      // Isi ek query mein, alag query nahi: har reading pe ek aur DB chakkar bachta hai.
+      "SELECT id, owner_id, name, mode FROM devices WHERE api_key_hash = $1",
       [hashApiKey(apiKey)]
     );
     if (!rows[0]) {

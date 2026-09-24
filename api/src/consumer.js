@@ -1,4 +1,4 @@
-// api/src/consumer.js  -> ye f-step P5-f2 pe daalni hai (P3.1: touchDevices; P5-f2: predict per reading)
+// api/src/consumer.js  -> ye f-step P7-f2 pe daalni hai (P3.1: touchDevices; P5-f2: predict; P7-f2: /ingest ka score + action)
 import { pool } from "./db.js";
 import { redis, TELEMETRY_STREAM } from "./redis.js";
 import { errText } from "./errText.js";
@@ -140,10 +140,15 @@ async function handleBatch(messages) {
 
   // P5-f2: poore batch ka ek predict call. Score reading ke saath HI likhte hain (same INSERT),
   // to reading aur uska score kabhi alag-alag nahi ho sakte.
-  const preds = await predict(rows.map((r) => r.metricsObj));
-  rows.forEach((r, i) => {
-    r.attack_proba = preds[i]?.attack_proba ?? null;
-    r.is_attack = preds[i]?.is_attack ?? null;
+  // P7-f2: prevent mode wali rows ka score /ingest pehle hi de chuka - sirf baaki ko score karo.
+  const need = rows.filter((r) => !r.score);
+  const preds = need.length ? await predict(need.map((r) => r.metricsObj)) : [];
+  need.forEach((r, i) => {
+    r.score = preds[i];
+  });
+  rows.forEach((r) => {
+    r.attack_proba = r.score?.attack_proba ?? null;
+    r.is_attack = r.score?.is_attack ?? null;
   });
 
   const { doneIds, poisonIds, inserted} = rows.length
@@ -159,8 +164,9 @@ async function handleBatch(messages) {
     const duplicate = doneIds.length - inserted;
     const attacks = rows.filter((r) => r.is_attack).length;
     const unscored = rows.filter((r) => r.is_attack === null).length;
+    const blocked = rows.filter((r) => r.action === "blocked").length;
     console.log(
-      `Consumer: ${inserted} written, ${duplicate} duplicate, ${dropIds.length + poisonIds.length} dropped, ${acked} acked | model: ${attacks} attack, ${unscored} unscored`
+      `Consumer: ${inserted} written, ${duplicate} duplicate, ${dropIds.length + poisonIds.length} dropped, ${acked} acked | model: ${attacks} attack, ${unscored} unscored | ips: ${blocked} blocked, ${need.length} scored here`
     );
   }
 }
@@ -201,12 +207,12 @@ async function insertMany(rows) {
   const tuples = [];
   const params = [];
   rows.forEach((r, i) => {
-    const b = i * 8;
-    const ph = Array.from({ length: 8 }, (_, j) => `$${b + j + 1}`);
+    const b = i * 9; // P7-f2: 9 columns (action joda)
+    const ph = Array.from({ length: 9 }, (_, j) => `$${b + j + 1}`);
     tuples.push(`(${ph.join(", ")})`);
     params.push(
       r.stream_id, r.device_id, r.owner_id, r.ts, r.received_at, r.metrics,
-      r.attack_proba, r.is_attack
+      r.attack_proba, r.is_attack, r.action
     );
   });
 
@@ -214,7 +220,7 @@ async function insertMany(rows) {
   // exactly-once storage. Redelivery after a crash becomes a harmless no-op.
   const { rowCount } = await pool.query(
     `INSERT INTO readings (stream_id, device_id, owner_id, ts, received_at, metrics,
-                           attack_proba, is_attack)
+                           attack_proba, is_attack, action)
      VALUES ${tuples.join(", ")}
      ON CONFLICT (stream_id) DO NOTHING`,
     params
@@ -263,6 +269,22 @@ function parseEntry(id, f) {
     return { ok: false, reason: "metrics is not a JSON object" };
   }
 
+  // P7-f2: prevent mode mein /ingest score kar chuka ho to wo yahan aata hai. Stream bhi
+  // boundary hai - yahan bhi check. Field hi na ho = detect mode -> neeche consumer khud score karega.
+  let score;
+  if (f.attack_proba !== undefined) {
+    const p = Number(f.attack_proba);
+    if (!(p >= 0 && p <= 1)) return { ok: false, reason: "attack_proba not in 0..1" };
+    if (f.is_attack !== "true" && f.is_attack !== "false")
+      return { ok: false, reason: "is_attack not true/false" };
+    score = { attack_proba: p, is_attack: f.is_attack === "true" };
+  }
+  // Galat action DB ka CHECK bhi rokta, par tab poora batch fail hota aur row-by-row chalta.
+  // Yahin pakdo: sasta, aur log mein saaf wajah.
+  if (f.action !== undefined && f.action !== "allowed" && f.action !== "blocked") {
+    return { ok: false, reason: "action not allowed/blocked" };
+  }
+
   return {
     ok: true,
     row: {
@@ -273,6 +295,8 @@ function parseEntry(id, f) {
       received_at: f.received_at,
       metrics: f.metrics, // already a JSON string -> straight into JSONB
       metricsObj: metrics, // P5-f2: model ke liye parsed copy (DB mein nahi jaati)
+      score, // P7-f2: undefined = abhi score hona baaki
+      action: f.action ?? null, // P7-f2: NULL = detect mode (koi IPS faisla nahi)
     },
   };
 }
