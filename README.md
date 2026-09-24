@@ -1,4 +1,4 @@
-<!-- README.md -> ye f-step P6.4-f2 pe daalni hai (f2: diagram top-down + Screenshots; "How to run tests" = ASH) -->
+<!-- README.md -> ye f-step P6.4-f3 pe daalni hai (f2: diagram TD + Screenshots + How to run tests; f3: cold start 2 naap) -->
 # IoT Fleet Monitor
 
 Devices send telemetry over HTTP. The API accepts it fast, queues it in a Redis stream,
@@ -93,9 +93,10 @@ at build time. Missing, it would silently become `undefined`, so `vite.config.js
 ## Cold start (measured, not guessed)
 
 Render's docs say a sleeping free service can take **up to about a minute** to wake up.
-I measured it **once** (24 Sept 2026) in the browser DevTools (Brave): `/status` took **22.9 s** cold
-(almost all of it "waiting for server response", which includes Neon waking up) and
-**0.48 s** warm. One sample only, so treat it as an example, not a constant.
+I measured it **twice** on 24 Sept 2026 in the browser DevTools (Brave): `/status` took
+**22.9 s** and **34.3 s** cold, and **0.48 s** warm. In the first run the Timing tab showed
+almost all of it as "waiting for server response", which includes Neon waking up. The second
+run is in the screenshot above. Two samples only, so treat them as examples, not a constant.
 
 **Why no uptime pinger:** keeping Render awake would keep the consumer polling Redis all
 month. The consumer blocks for 5 s per read, so it makes about 12 Redis calls per minute while
