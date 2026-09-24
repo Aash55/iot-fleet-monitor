@@ -1,4 +1,4 @@
--- api/db/schema.sql  -> ye f-step P5-f3 pe daalni hai (P5-f2: attack_proba + is_attack; P5-f3: attack index)
+-- api/db/schema.sql  -> ye f-step P7-f1 pe daalni hai (P5-f2: attack_proba + is_attack; P5-f3: attack index; P7-f1: devices.mode)
 -- Sirf NAYE database ke liye (P6 pe Neon). Purane local DB pe CREATE TABLE IF NOT EXISTS
 -- kuch nahi badalta - wahan pgAdmin wali migration (Block B-E) chalti hai.
 CREATE TABLE IF NOT EXISTS users (
@@ -17,6 +17,9 @@ CREATE TABLE IF NOT EXISTS devices (
   -- last_seen se nikalta hai - stored copy 20 Sept ke baad bhi 'online' bol rahi thi.
   last_seen    TIMESTAMPTZ,
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  -- P7-f1: 'detect' = IDS (sirf alert), 'prevent' = IPS (attack pe block). Purana DB: p7-f1-device-mode.sql
+  mode         TEXT        NOT NULL DEFAULT 'detect'
+    CONSTRAINT devices_mode_check CHECK (mode IN ('detect', 'prevent')),
   -- P3.1: ek owner ke do device ka ek naam nahi. Alag owner same naam rakh sakte hain.
   -- Naam explicit hai kyunki routes/devices.js 409 dene ke liye isi naam ko pehchanta hai.
   CONSTRAINT devices_owner_id_name_key UNIQUE (owner_id, name)
