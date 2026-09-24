@@ -1,9 +1,10 @@
-<!-- README.md -> ye f-step P6.4-f3 pe daalni hai (f2: diagram TD + Screenshots + How to run tests; f3: cold start 2 naap) -->
+<!-- README.md -> ye f-step P5-f5 pe daalni hai (P6.4: diagram + screenshots + cold start; P5-f5: ML section) -->
 # IoT Fleet Monitor
 
 Devices send telemetry over HTTP. The API accepts it fast, queues it in a Redis stream,
-and a consumer writes it to Postgres. A React dashboard shows each device's status and a
-live chart. Built solo, deployed on free tiers.
+and a consumer scores every reading with an intrusion-detection model (Random Forest,
+exported to ONNX) and writes it to Postgres. A React dashboard shows each device's status,
+a live chart, and the readings the model flagged as attacks. Built solo, deployed on free tiers.
 
 - **Live app:** https://iot-fleet-monitor.vercel.app
 - **API health:** https://iot-fleet-monitor-api.onrender.com/status
@@ -15,6 +16,11 @@ live chart. Built solo, deployed on free tiers.
 Device page: status badge and the live chart (refreshes every 5 seconds).
 
 ![Device page with status and live chart](docs/screenshots/device-chart.png)
+
+Attack alerts: the red badge counts readings the model flagged in the last 15 minutes, and
+red dots on the chart mark them (local run with the simulator in `--anomaly` mode).
+
+![Device page with the attack badge and red attack dots](docs/screenshots/attack-chart.png)
 
 Cold start: the API was asleep, so the `/status` request had to wait (see its Time column)
 before the header could say "API ok, database ok".
@@ -29,6 +35,7 @@ flowchart TD
     B["Browser<br/>React app on Vercel"] -- "JWT: /auth, /devices, /status" --> API
     API["Express API on Render"] -- "XADD telemetry" --> R[("Upstash Redis<br/>stream: telemetry")]
     R -- "XREADGROUP telemetry-writers" --> C["Consumer<br/>same Render process"]
+    C -- "score batch (in-process)" --> M["ONNX model<br/>onnxruntime-node"]
     C -- "XACK after insert" --> R
     C -- "INSERT ... ON CONFLICT (stream_id) DO NOTHING" --> P[("Neon Postgres")]
     API -- "SELECT devices, readings" --> P
@@ -37,10 +44,11 @@ flowchart TD
 1. A device sends `POST /ingest` with its API key. The API checks the key, validates the body
    (zod), adds the reading to the Redis stream and replies **202 Accepted**. 202, not 201:
    nothing is in Postgres yet.
-2. The consumer reads the stream as part of a consumer group, inserts the batch into
-   Postgres, and only then acknowledges (`XACK`) it.
-3. The dashboard reads devices and readings from Postgres through the API and refreshes the
-   device page every 5 seconds.
+2. The consumer reads the stream as part of a consumer group, scores the whole batch with
+   the model in one call, inserts readings and scores together into Postgres, and only then
+   acknowledges (`XACK`) the batch.
+3. The dashboard reads devices, readings and attack counts from Postgres through the API and
+   refreshes every 5 seconds.
 
 ## Tech stack
 
@@ -50,6 +58,7 @@ flowchart TD
 | Queue | Redis Streams + consumer group (Upstash in prod, Memurai locally) |
 | Database | PostgreSQL (Neon in prod, Postgres 15 locally) |
 | Web | React 19, Vite 8, React Router, TanStack Query, Recharts, Tailwind 4 |
+| ML | Python 3.14 (uv), pandas, scikit-learn (Random Forest), skl2onnx; onnxruntime-node in the API |
 | Hosting | Render (API), Vercel (web), all free tiers |
 | Tests | `node:test` (built in) for web, Postman / newman collections for the deployed stack |
 
@@ -77,6 +86,63 @@ Five unit tests cover this (`web/tests/getHealth.test.js`).
 
 **The build fails without a valid `VITE_API_URL`.** Vite bakes this value into the JavaScript
 at build time. Missing, it would silently become `undefined`, so `vite.config.js` stops the build.
+
+## ML: intrusion detection
+
+**Data.** CICIoT2023 from the Canadian Institute for Cybersecurity, University of New Brunswick
+(Neto et al., *Sensors* 23(13):5941, 2023, https://doi.org/10.3390/s23135941). The model is
+**binary**: benign vs attack (all 33 attack types in one class). I sampled 4,000 rows
+(2,000 benign, 2,000 attack) and split them 80/20, stratified: 3,200 to train, 800 held out.
+
+**The leak I found first.** With one feature, `iat`, the model scored F1 **0.991**. That was too
+good. The values showed why: benign `iat` is 0 or about 166.5 million, attacks sit near
+83 million, and each attack type has its own narrow band (DoS-TCP 82.93-82.96M, Mirai
+83.68-83.79M). The number records *which capture session* a row came from, not packet
+timing, so the model was learning the recording setup. I removed `iat`
+(`ml/leak_check.py` shows the evidence). Worth noting: `iat` was **not** in the top 3 of the
+feature importances, so low importance does not prove a feature is innocent. Correlated
+features share importance. The test is to train with the feature alone and without it.
+
+**Model and results.** Random Forest, 100 trees, 9 features (`ml/model.json` has the list and
+order). On the 800 held-out rows (400 benign, 400 attack):
+
+| | Predicted attack | Predicted benign |
+|---|---|---|
+| **Actual attack** | 387 (TP) | 13 (FN) |
+| **Actual benign** | 2 (FP) | 398 (TN) |
+
+Precision 0.995, recall 0.968, F1 **0.981**, false-positive rate 0.005.
+
+**Why that precision will not hold in a real fleet.** The test set is 50% attacks. A fleet is
+mostly benign. At the simulator's 3% attack rate, the same recall and false-positive rate give
+precision of about **0.86**. And that FPR comes from only 2 mistakes in 400 benign rows, so
+its 95% range (Clopper-Pearson) puts precision anywhere from **0.63 to 0.98**. More benign test
+data is needed before trusting the number.
+
+`class_weight="balanced"` is set, but on 50/50 data both weights come out as 1.00, so it does
+not fix any imbalance here.
+
+**Serving: ONNX inside the Node API.** `ml/train.py` exports the model to ONNX, and the
+consumer runs it with `onnxruntime-node` in the same process. On all 800 test rows the Node
+output matches scikit-learn: max probability difference 1.1e-7, zero label mismatches
+(`npm run parity`), about 6 microseconds per row. On Render's free instance the model loads in
+under a second at startup and the process uses about 127 MB of the 512 MB limit.
+Rejected: a separate Python service (a second free service to host and wake up, plus a network
+hop per batch).
+
+**Failure behaviour.** If the model cannot load, the API still starts, `/status` reports
+`"model": "unavailable"`, and readings are stored with a `NULL` score. A missing or
+non-numeric feature also gives `NULL`, never a guess with 0. The dashboard shows a red dot only
+for a real `is_attack = true`.
+
+**Alerts.** `GET /devices` returns `recent_attacks`: flagged readings in the last 15 minutes,
+counted by `received_at` (the API's clock, not the device's). There is no separate alerts
+table, because an alert has no state of its own yet (no acknowledge or resolve).
+
+**Caveat about the live demo.** The simulator replays rows from the same 4,000-row sample,
+and 80% of those rows were training data. So a red dot in the demo shows that the pipeline
+works end to end. It is **not** evidence of accuracy. The accuracy evidence is the held-out
+table above.
 
 ## Security notes
 
@@ -119,9 +185,10 @@ Needs Node 24, PostgreSQL and a Redis-compatible server on `127.0.0.1:6379`.
 ## How to run tests
 
 Web unit tests use Node's built-in test runner (`node:test`), so there is no extra test
-package. They check `getHealth()` (the header text) against a fake local server, so no
-network and no running API are needed. Five cases: the real JSON "ok" reply, an HTML page
-with status 200, JSON without `status: "ok"`, broken JSON, and a 503.
+package. Five cases check `getHealth()` (the header text) against a fake local server, so no
+network and no running API are needed: the real JSON "ok" reply, an HTML page with status 200,
+JSON without `status: "ok"`, broken JSON, and a 503. Two more check that only
+`is_attack === true` becomes a red dot on the chart.
 
 From the repo root, after `npm ci` in `web/`:
 
@@ -130,7 +197,13 @@ cd web
 npm test
 ```
 
-Expected: `pass 5` and `fail 0`.
+Expected: `pass 7` and `fail 0`.
+
+The model has two checks of its own. Both need the sample file `api/scripts/samples.local.json`,
+which `npm run extract` (in `api/`) builds from the CICIoT2023 CSVs in `data/`. Neither is in the
+repo. `cd ml && uv run python train.py` retrains, exports and ends with `SELF-CHECK PASS`; it also
+writes the test rows that `cd api && npm run parity` then uses to compare the Node output with
+scikit-learn.
 
 The deployed stack (API on Render, web on Vercel) is checked with Postman collections that
 assert on body content, not only status codes: the JSON health reply, the CORS header and the
@@ -138,6 +211,6 @@ current JavaScript bundle name. These collections are kept outside the repo.
 
 ## What's next
 
-- Anomaly detection: a scikit-learn model exported to ONNX and run inside the Node consumer
-  (in progress).
+- Which attack types make up the 13 missed attacks, and a separate demo sample that shares
+  no rows with the training data.
 - Idempotency key on `/ingest`, a Content-Security-Policy header, retry with backoff in the consumer.
