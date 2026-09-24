@@ -1,4 +1,4 @@
-# ml/train.py   <-- ye P4 f-step 3 pe badli (f3: ONNX export + parity, neeche)
+# ml/train.py   <-- ye P4 f-step 4 pe badli (f4: JSON files LF mein, har OS pe same bytes)
 #
 # Kaam: B1 ka asli model. Random Forest, 9 features - iat NAHI.
 # Kyun iat nahi: leak_check.py (24 Sept) mein SIRF iat se F1 = 0.9913 aaya. benign ka iat
@@ -140,14 +140,14 @@ META_PATH.write_text(json.dumps({
     "test": {"rows": len(y_test), "precision": round(precision, 4), "recall": round(recall, 4),
              "f1": round(float(f1), 4), "fpr": round(fpr, 4),
              "precision_at_sim_ratio": round(precision_at(fpr), 4), "sim_attack_ratio": r},
-}, indent=2) + "\n", encoding="utf-8")
+}, indent=2) + "\n", encoding="utf-8", newline="\n")  # Windows pe bhi LF (warna CRLF)
 
 # Node (f4) yahi rows Float32Array bana ke chalayega aur ye probabilities milayega.
 PARITY_PATH.write_text(json.dumps({
     "features": MODEL_FEATURES,
     "rows": X_test.to_numpy().tolist(),
     "proba_attack": [round(float(p), 6) for p in sk_proba],
-}) + "\n", encoding="utf-8")
+}) + "\n", encoding="utf-8", newline="\n")
 print(f"    likha: {MODEL_PATH.name}, {META_PATH.name}, {PARITY_PATH.name}")
 
 if max_diff < 1e-5 and label_mismatch <= ties:
