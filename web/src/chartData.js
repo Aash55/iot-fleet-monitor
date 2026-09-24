@@ -1,11 +1,18 @@
-// web/src/chartData.js  -> ye f-step 3 pe daalni hai (P3.3, nayi file)
+// web/src/chartData.js  -> ye f-step P5-f4 pe daalni hai (P3.3; P5-f4: attack flag)
 // Chart ke chhote helper. Alag file mein kyunki component file (.jsx) se sirf component
 // export hone chahiye - warna Vite ka Fast Refresh (save pe turant update) toot-ta hai.
 
 // API ts ko UTC "...Z" mein bhejta hai. Date.parse usse ek number (ms) bana deta hai:
 // ek pal = ek number, timezone ka koi lena-dena nahi. IST sirf DIKHATE waqt aata hai.
+// P5-f4: attack = model ne is reading ko attack kaha (API ka is_attack). Sirf `true` hi
+// attack hai: false = benign, null = score hi nahi hua (model unavailable) - "pata nahi"
+// ko laal dot nahi dikhana.
 export function toChartData(readings, metric) {
-  return readings.map((r) => ({ t: Date.parse(r.ts), value: r.metrics[metric] }))
+  return readings.map((r) => ({
+    t: Date.parse(r.ts),
+    value: r.metrics[metric],
+    attack: r.is_attack === true,
+  }))
 }
 
 // Browser ka apna timezone (tumhare laptop pe IST). Code mein +5:30 kahin nahi jodna.
