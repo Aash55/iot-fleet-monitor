@@ -1,4 +1,4 @@
-// api/src/routes/devices.js  -> ye f-step P7-f1 pe daalni hai (P3.1; P5-f3: recent_attacks + score; P7-f1: mode + PATCH)
+// api/src/routes/devices.js  -> ye f-step P7-f4a pe daalni hai (P3.1; P5-f3: recent_attacks + score; P7-f1: mode + PATCH; P7-f4a: recent_blocked + action)
 import { Router } from "express";
 import { z } from "zod";
 import { pool } from "../db.js";
@@ -36,8 +36,16 @@ const RECENT_ATTACKS_SQL = `(SELECT count(*)::int FROM readings r
        WHERE r.device_id = devices.id AND r.is_attack
          AND r.received_at > now() - interval '${ALERT_WINDOW}') AS recent_attacks`;
 
-// P7-f1: mode bhi har jagah (list, ek device, POST, PATCH) - web ka toggle (f4) isi se chalega.
-const PUBLIC_COLUMNS = `id, name, mode, ${STATUS_SQL}, last_seen, created_at, ${RECENT_ATTACKS_SQL}`;
+// P7-f4a: "N blocked · 15 min" badge. recent_attacks jaisa hi: same 15 min, same received_at.
+// Do alag ginti kyun: recent_attacks = model ne attack KAHA (detect + prevent dono);
+// recent_blocked = gateway ko ROKNE ko kaha (sirf prevent). 0.5-0.9 wali reading pehle mein
+// aati hai, doosre mein nahi. action NULL (detect / purani rows) -> 'blocked' nahi -> nahi ginta.
+const RECENT_BLOCKED_SQL = `(SELECT count(*)::int FROM readings r
+       WHERE r.device_id = devices.id AND r.action = 'blocked'
+         AND r.received_at > now() - interval '${ALERT_WINDOW}') AS recent_blocked`;
+
+// P7-f1: mode bhi har jagah (list, ek device, POST, PATCH) - web ka toggle (f4b) isi se chalega.
+const PUBLIC_COLUMNS = `id, name, mode, ${STATUS_SQL}, last_seen, created_at, ${RECENT_ATTACKS_SQL}, ${RECENT_BLOCKED_SQL}`;
 
 // Naam ki uniqueness DB ka constraint enforce karta hai, code nahi.
 // Ye naam schema.sql aur migration dono mein same hai.
@@ -165,7 +173,8 @@ devicesRouter.get("/:id/readings", async (req, res, next) => {
     //    liye bana hai. owner_id yahan dobara = defence in depth.
     const { rows } = await pool.query(
       // P5-f3: score bhi bhejo - chart attack wale points alag rang mein dikhayega (f4).
-      `SELECT id, ts, metrics, attack_proba, is_attack FROM readings
+      // P7-f4a: action bhi ('allowed' | 'blocked' | null) - chart pe blocked point = ✕ (f4b).
+      `SELECT id, ts, metrics, attack_proba, is_attack, action FROM readings
        WHERE device_id = $1 AND owner_id = $2
        ORDER BY ts DESC
        LIMIT $3`,
