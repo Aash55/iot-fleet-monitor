@@ -1,8 +1,9 @@
-// api/src/server.js  -> ye f-step P6.2-f1 pe daalni hai (boot timeout 5000 -> 8000)
+// api/src/server.js  -> ye f-step P5-f1 pe daalni hai (P6.2-f1: boot timeout 8000; P5-f1: loadModel)
 import app from "./app.js";
 import { redis } from "./redis.js";
 import { errText } from "./errText.js";
 import { startConsumer } from "./consumer.js";
+import { loadModel } from "./model.js";
 
 const required = ["DATABASE_URL", "JWT_SECRET", "CORS_ORIGIN", "REDIS_URL"];
 const missing = required.filter((key) => !process.env[key]);
@@ -10,6 +11,10 @@ if (missing.length) {
   console.error("Missing env variables:", missing.join(", "));
   process.exit(1);
 }
+
+// P5-f1: model EK BAAR yahan, listen() se pehle. Kabhi throw nahi karta - fail ho to
+// /status "model: unavailable" dikhata hai aur API baaki kaam karti rehti hai.
+await loadModel();
 
 // Fail fast: if Redis is down at boot, /ingest can only 500. Better to not start.
 // connect() alone is NOT enough: node-redis retries a dead socket forever, so an

@@ -1,4 +1,4 @@
-// api/src/app.js  -> ye f-step P6.3-f2C pe daalni hai (P6.2-f1: noStore + err.status; P6.2-f4: cors maxAge; P6.3-f2C: /status alias)
+// api/src/app.js  -> ye f-step P5-f1 pe daalni hai (P6.3-f2C: /status alias; P5-f1: model field)
 import express from "express";
 import cors from "cors";
 import { pool } from "./db.js";
@@ -9,6 +9,7 @@ import { requireDevice } from "./middleware/deviceAuth.js";
 import { ingestRouter } from "./routes/ingest.js";
 import { redis } from "./redis.js";
 import { errText } from "./errText.js";
+import { modelStatus } from "./model.js";
 
 const app = express();
 
@@ -35,8 +36,12 @@ async function health(req, res) {
     }),
   ]);
 
+  // model 200/503 tay NAHI karta: ML na chale tab bhi readings store hoti hain. Aur Render
+  // /health pe 503 dekhe to naya deploy live hi nahi karta - ML ki galti poori API rok deti.
   const ok = db === "up" && cache === "up";
-  res.status(ok ? 200 : 503).json({ status: ok ? "ok" : "degraded", db, redis: cache });
+  res
+    .status(ok ? 200 : 503)
+    .json({ status: ok ? "ok" : "degraded", db, redis: cache, model: modelStatus() });
 }
 
 // Same check, two names. /health stays for Render's Health Check Path.
