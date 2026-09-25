@@ -1,4 +1,4 @@
-// web/src/App.jsx  -> ye f-step P8-a pe daalni hai (P3.3: /devices/:id route; P8-a: TopBar + naya page container)
+// web/src/App.jsx  -> ye f-step P8-b pe daalni hai (P3.3: /devices/:id route; P8-a: TopBar + naya page container; P8-b: email -> DevicesList)
 import { Suspense, lazy, useCallback, useEffect, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router'
 import { useQueryClient } from '@tanstack/react-query'
@@ -83,10 +83,12 @@ export default function App() {
             path="/devices"
             element={
               <RequireAuth session={session}>
-                <p className="mb-6 text-sm text-slate-500">
-                  Signed in{session?.user ? ` as ${session.user.email}` : ', verifying session...'}
-                </p>
-                <DevicesList token={session?.token} onAuthError={handleLogout} />
+                {/* P8-b: "Signed in as" ab DevicesList ke page header ke andar (design) */}
+                <DevicesList
+                  token={session?.token}
+                  email={session?.user?.email}
+                  onAuthError={handleLogout}
+                />
               </RequireAuth>
             }
           />

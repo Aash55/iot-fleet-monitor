@@ -1,4 +1,4 @@
-// web/src/ReadingsChart.jsx  -> ye f-step P7-f4b pe daalni hai (P3.3; P5-f4: attack dots; P7-f4b: blocked ✕)
+// web/src/ReadingsChart.jsx  -> ye f-step P8-b pe daalni hai (P3.3; P5-f4: attack dots; P7-f4b: blocked ✕; P8-b: ✕ violet)
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { formatCompact, formatDateTime, formatTime } from './chartData.js'
 
@@ -6,7 +6,8 @@ import { formatCompact, formatDateTime, formatTime } from './chartData.js'
 // recharts har point ke liye ye function bulata hai; null = us point pe dot nahi.
 // P7-f4b: blocked reading pe ✕ (laal dot ki jagah). Blocked lagbhag hamesha attack bhi hota
 // hai, to dono ek saath banate to ek ke upar ek dab jaate - ✕ jeet-ta hai. Pehle safed mota ✕,
-// upar kaala patla: line ke upar bhi saaf dikhe.
+// upar patla rangin: line ke upar bhi saaf dikhe.
+// P8-b: ✕ kaala -> violet (#6d28d9 = violet-700), BlockedBadge ke saath same rang.
 function AttackDot({ cx, cy, payload }) {
   if (cx == null || cy == null) return null
   if (payload.blocked) {
@@ -15,7 +16,7 @@ function AttackDot({ cx, cy, payload }) {
     return (
       <g>
         <path d={path} stroke="#fff" strokeWidth={5} strokeLinecap="round" />
-        <path d={path} stroke="#0f172a" strokeWidth={2.5} strokeLinecap="round" />
+        <path d={path} stroke="#6d28d9" strokeWidth={2.5} strokeLinecap="round" />
       </g>
     )
   }
