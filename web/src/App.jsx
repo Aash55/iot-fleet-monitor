@@ -1,4 +1,4 @@
-// web/src/App.jsx  -> ye f-step P8-b pe daalni hai (P3.3: /devices/:id route; P8-a: TopBar + naya page container; P8-b: email -> DevicesList)
+// web/src/App.jsx  -> ye f-step P8-d pe daalni hai (P3.3: /devices/:id route; P8-a: TopBar + naya page container; P8-b: email -> DevicesList; P8-d: login card jagah)
 import { Suspense, lazy, useCallback, useEffect, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router'
 import { useQueryClient } from '@tanstack/react-query'
@@ -72,7 +72,9 @@ export default function App() {
               session ? (
                 <Navigate to="/devices" replace />
               ) : (
-                <div className="mx-auto max-w-md">
+                // P8-d: design - card 400px chauda. Upar ki doori: desktop main ka py-8 (32px)
+                // + mt-16 (64px) = 96px; phone py-6 (24px) + mt-4 (16px) = 40px.
+                <div className="mx-auto mt-4 w-full max-w-[400px] sm:mt-16">
                   <LoginForm onSuccess={handleLogin} />
                 </div>
               )

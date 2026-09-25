@@ -1,5 +1,12 @@
+// web/src/LoginForm.jsx  -> ye f-step P8-d pe daalni hai (P2: login form; P8-d: Claude Design card + amber error)
+// P8-d mein LOGIC nahi badla: galat password pe password khaali, network error ka alag text,
+// busy mein button band. Sirf dikhawat + shabd "Sign in" -> "Log in" (design).
 import { useState } from 'react'
 import { login } from './api.js'
+
+const FOCUS = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600'
+// Phone: 44px ooncha + text-base (16px, iOS zoom nahi). 640px+: 40px + text-sm.
+const INPUT = `h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-base text-slate-900 sm:h-10 sm:text-sm ${FOCUS}`
 
 export default function LoginForm({ onSuccess }) {
   const [email, setEmail] = useState('')
@@ -27,11 +34,31 @@ export default function LoginForm({ onSuccess }) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-      <h2 className="text-lg font-semibold">Sign in</h2>
+    <form
+      onSubmit={handleSubmit}
+      className="flex flex-col gap-5 rounded-xl border border-slate-200 bg-white p-6 shadow-xs sm:p-8"
+    >
+      <div className="flex flex-col gap-1">
+        <h1 className="text-xl font-semibold">Log in</h1>
+        <p className="text-sm text-slate-600">Fleet Monitor console</p>
+      </div>
 
-      <div className="space-y-1">
-        <label htmlFor="email" className="block text-sm font-medium">Email</label>
+      {/* Error form ke UPAR, fields se pehle: pehle galti dikhe, phir theek karne ki jagah.
+          Amber, laal nahi (laal = attack). */}
+      {error && (
+        <div role="alert" className="flex items-start gap-2.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm text-amber-900">
+          <span
+            aria-hidden="true"
+            className="mt-px grid size-[18px] flex-none place-items-center rounded-full bg-amber-500 text-xs font-bold text-white"
+          >
+            !
+          </span>
+          {error}
+        </div>
+      )}
+
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="email" className="text-sm font-medium text-slate-700">Email</label>
         <input
           id="email"
           type="email"
@@ -39,12 +66,12 @@ export default function LoginForm({ onSuccess }) {
           required
           value={email}
           onChange={(event) => setEmail(event.target.value)}
-          className="w-full rounded border border-slate-300 px-3 py-2"
+          className={INPUT}
         />
       </div>
 
-      <div className="space-y-1">
-        <label htmlFor="password" className="block text-sm font-medium">Password</label>
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="password" className="text-sm font-medium text-slate-700">Password</label>
         <input
           id="password"
           type="password"
@@ -53,20 +80,16 @@ export default function LoginForm({ onSuccess }) {
           minLength={8}
           value={password}
           onChange={(event) => setPassword(event.target.value)}
-          className="w-full rounded border border-slate-300 px-3 py-2"
+          className={INPUT}
         />
       </div>
-
-      {error && (
-        <p role="alert" className="rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
-      )}
 
       <button
         type="submit"
         disabled={busy}
-        className="w-full rounded bg-slate-900 px-4 py-2 font-medium text-white disabled:opacity-50"
+        className={`h-11 w-full rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-wait disabled:opacity-50 sm:h-10 ${FOCUS}`}
       >
-        {busy ? 'Signing in...' : 'Sign in'}
+        {busy ? 'Logging in...' : 'Log in'}
       </button>
     </form>
   )
