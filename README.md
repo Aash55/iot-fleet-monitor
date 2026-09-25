@@ -1,4 +1,4 @@
-<!-- README.md -> ye f-step P9-d pe daalni hai (P6.4: diagram + screenshots + cold start; P5-f5: ML section; P7-f5: IPS mode; P8-d2: redesign screenshots + 13 tests; P9-d: ML section naye data/model/thresholds ke saath) -->
+<!-- README.md -> ye f-step P9-e pe daalni hai (P6.4: diagram + screenshots + cold start; P5-f5: ML section; P7-f5: IPS mode; P8-d2: redesign screenshots + 13 tests; P9-d: ML section naye data/model/thresholds ke saath; P9-e: logout sirf 401, rate-limit gap, 15 tests) -->
 # IoT Fleet Monitor
 
 Devices send telemetry over HTTP. The API accepts it fast, queues it in a Redis stream,
@@ -292,6 +292,10 @@ production database. Lesson: check a deploy in the database, not in the API repl
 - **Known trade-off:** the JWT is kept in `localStorage`, so any XSS on the site could read it.
   Mitigations today: tokens expire after 2 hours, and the app re-checks the token with `/me`
   on load. Not done yet: a Content-Security-Policy header, or httpOnly cookies.
+- The app logs out only when `/me` answers 401. A network error or a 5xx (for example during a
+  cold start) keeps the session and asks again every 5 seconds.
+- **No rate limiting yet** on `/auth/login`, `/auth/register` or `/ingest`. argon2id makes each
+  password guess slow, but nothing limits how many guesses an IP can make.
 - Passwords are hashed with argon2id. Device API keys are random 256-bit values; only their
   SHA-256 hash is stored.
 - Private API replies send `Cache-Control: no-store`. CORS allows only the Vercel origin.
@@ -335,7 +339,8 @@ JSON without `status: "ok"`, broken JSON, and a 503. Two more check that only
 token and `{ mode }`, and a 404 or 401 throws an `ApiError` carrying the status. Three check the
 header's colour (`healthTone()`): only the exact "API ok, database ok" text is grey, the first
 "Checking API..." has a hollow dot, and anything else (database down, HTTP error, unreachable)
-is amber.
+is amber. Two check `shouldLogout()`: only a 401 from `/me` logs the user out, while a 503 or a
+network error does not.
 
 From the repo root, after `npm ci` in `web/`:
 
@@ -344,7 +349,7 @@ cd web
 npm test
 ```
 
-Expected: `pass 13` and `fail 0`.
+Expected: `pass 15` and `fail 0`.
 
 The model pipeline needs the CICIoT2023 CSVs in `data/` (not in the repo). From `ml/`, in order:
 `uv run python pool.py` (sample and the four splits), `curve.py` (learning curve), `compare.py`

@@ -1,9 +1,9 @@
-// web/src/App.jsx  -> ye f-step P8-d pe daalni hai (P3.3: /devices/:id route; P8-a: TopBar + naya page container; P8-b: email -> DevicesList; P8-d: login card jagah)
+// web/src/App.jsx  -> ye f-step P9-e pe daalni hai (P3.3: /devices/:id route; P8-a: TopBar + naya page container; P8-b: email -> DevicesList; P8-d: login card jagah; P9-e: /me sirf 401 pe logout, baaki pe retry)
 import { Suspense, lazy, useCallback, useEffect, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { getHealth, getMe } from './api.js'
-import { readToken, saveToken, clearToken } from './auth.js'
+import { readToken, saveToken, clearToken, shouldLogout } from './auth.js'
 import { HEALTH_CHECKING } from './health.js'
 import LoginForm from './LoginForm.jsx'
 import DevicesList from './DevicesList.jsx'
@@ -41,15 +41,25 @@ export default function App() {
   }, [queryClient])
 
   // Token from localStorage is only a claim. Ask /me whether the API still accepts it.
+  // P9-e: 401 = token thukraya -> logout. Baaki error (network, 5xx, cold start) -> 5 s baad
+  // dobara poochho. Pehle koi bhi error logout kar deta tha.
   useEffect(() => {
     if (!session || session.user) return
     let active = true
+    let timer
 
-    getMe(session.token)
-      .then((user) => { if (active) setSession((prev) => prev && { ...prev, user }) })
-      .catch(() => { if (active) handleLogout() })
+    const check = () => {
+      getMe(session.token)
+        .then((user) => { if (active) setSession((prev) => prev && { ...prev, user }) })
+        .catch((err) => {
+          if (!active) return
+          if (shouldLogout(err)) handleLogout()
+          else timer = setTimeout(check, 5000)
+        })
+    }
+    check()
 
-    return () => { active = false }
+    return () => { active = false; clearTimeout(timer) }
   }, [session, handleLogout])
 
   function handleLogin({ user, token }) {

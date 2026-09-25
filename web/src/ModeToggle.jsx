@@ -1,4 +1,4 @@
-// web/src/ModeToggle.jsx  -> ye f-step P8-c pe daalni hai (P7-f4b: NAYI file; P8-c: design ka card + segmented + spinner)
+// web/src/ModeToggle.jsx  -> ye f-step P9-e pe daalni hai (P7-f4b: NAYI file; P8-c: design ka card + segmented + spinner; P9-e: help text mein number nahi)
 // Device page pe Detect | Prevent. Click -> PATCH /devices/:id -> jawab ka naya device
 // parent ko (onChanged), jo cache mein daal deta hai. Screen tabhi badalti hai jab SERVER
 // haan bol de - pehle se "prevent" dikha dena (optimistic) galat hota agar PATCH fail ho.
@@ -15,7 +15,9 @@ const FOCUS = 'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visi
 
 const MODES = [
   { value: 'detect', label: 'Detect', help: 'Alerts only. Every reading is accepted.' },
-  { value: 'prevent', label: 'Prevent', help: 'Readings the model scores 0.90 or higher are blocked.' },
+  // P9-e: number NAHI likha. Threshold ml/model.json mein hai (model ke saath badalta hai); UI mein
+  // hardcode 0.90 P9 ke baad galat ho gaya tha (asli 0.931).
+  { value: 'prevent', label: 'Prevent', help: 'High-confidence attacks are blocked. Lower scores only raise an alert.' },
 ]
 
 export default function ModeToggle({ token, device, onChanged, onAuthError }) {
