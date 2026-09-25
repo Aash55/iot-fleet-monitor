@@ -1,12 +1,14 @@
-// web/src/App.jsx  -> ye f-step 3 pe daalni hai (P3.3: /devices/:id route)
+// web/src/App.jsx  -> ye f-step P8-a pe daalni hai (P3.3: /devices/:id route; P8-a: TopBar + naya page container)
 import { Suspense, lazy, useCallback, useEffect, useState } from 'react'
-import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router'
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { getHealth, getMe } from './api.js'
 import { readToken, saveToken, clearToken } from './auth.js'
+import { HEALTH_CHECKING } from './health.js'
 import LoginForm from './LoginForm.jsx'
 import DevicesList from './DevicesList.jsx'
 import RequireAuth from './RequireAuth.jsx'
+import TopBar from './TopBar.jsx'
 
 // Recharts bhaari hai (~350 kB). Chart sirf device page pe chahiye, isliye wo page alag
 // file (chunk) mein banta hai aur tabhi download hota hai jab koi device kholo.
@@ -14,7 +16,7 @@ import RequireAuth from './RequireAuth.jsx'
 const DeviceDetail = lazy(() => import('./DeviceDetail.jsx'))
 
 export default function App() {
-  const [apiStatus, setApiStatus] = useState('Checking API...')
+  const [apiStatus, setApiStatus] = useState(HEALTH_CHECKING)
   const [session, setSession] = useState(() => {
     const token = readToken()
     return token ? { token, user: null } : null
@@ -58,25 +60,11 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
-      <header className="flex items-center justify-between bg-slate-900 px-6 py-4 text-white">
-        <Link to="/devices" className="text-xl font-semibold hover:text-slate-300">
-          Fleet Monitor
-        </Link>
-        <div className="flex items-center gap-4">
-          <p className="text-sm text-slate-300">{apiStatus}</p>
-          {session && (
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="rounded border border-slate-500 px-3 py-1 text-sm hover:bg-slate-800"
-            >
-              Log out
-            </button>
-          )}
-        </div>
-      </header>
+      {/* Login page pe session nahi -> onLogout undefined -> Log out button nahi dikhta */}
+      <TopBar apiStatus={apiStatus} onLogout={session ? handleLogout : undefined} />
 
-      <main className="mx-auto max-w-3xl px-6 py-10">
+      {/* P8-a: design ka container. max-w-5xl = 1024px. Phone pe px-4 py-6, 640px+ pe px-6 py-8. */}
+      <main className="mx-auto max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
         <Routes>
           <Route
             path="/login"

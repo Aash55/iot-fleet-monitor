@@ -1,4 +1,4 @@
-<!-- web/index.html -> ye f-step P6.4-f1 pe daalni hai (title "web" -> "IoT Fleet Monitor") -->
+<!-- web/index.html -> ye f-step P8-a pe daalni hai (P6.4-f1: title; P8-a: IBM Plex Sans font) -->
 <!doctype html>
 <html lang="en">
   <head>
@@ -6,6 +6,11 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>IoT Fleet Monitor</title>
+    <!-- P8-a: design ka font. preconnect = font server se connection pehle hi khol lo.
+         display=swap = font aane tak system font dikhao, text chhupao mat. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap" />
   </head>
   <body>
     <div id="root"></div>

@@ -1,1 +1,16 @@
+/* web/src/index.css  -> ye f-step P8-a pe daalni hai (Claude Design redesign: font + page base) */
 @import "tailwindcss";
+
+/* Tailwind 4 mein theme CSS ke andar hi set hota hai (tailwind.config.js nahi).
+   --font-sans badla = har jagah ki `font-sans` (aur body ka default) IBM Plex Sans.
+   Font file index.html ka Google Fonts <link> laata hai. Na aaye to baaki naam
+   (system font) chalte hain - page tootega nahi, bas font alag dikhega. */
+@theme {
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+@layer base {
+  body {
+    @apply bg-slate-50 text-slate-900 antialiased;
+  }
+}
