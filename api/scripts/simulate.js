@@ -1,4 +1,4 @@
-// api/scripts/simulate.js   <-- ye f-step P9-d pe daalni hai (P1 3.1/3.2: simulator; P6.3-f3: --fleet flag; P7-f3: gateway/PEP; P9-d: samples ab ml/demo.py se)
+// api/scripts/simulate.js   <-- ye f-step P9-d pe daalni hai (P1 3.1/3.2: simulator; P6.3-f3: --fleet flag; P7-f3: gateway/PEP; P9-d: samples ab ml/demo.py se; P9-d2: summary text)
 //
 // Kaam: sim device ban ke asli CICIoT2023 rows ko POST /ingest pe bhejna.
 //   f-step 3.1 -> config + file load + row chunna + --dry-run self-check
@@ -270,7 +270,7 @@ async function sendOne(device) {
     }
 
     stats.allowed++;
-    // prevent mode mein score bhi dikhao (0.5-0.9 = alert hai par block nahi)
+    // prevent mode mein score bhi dikhao (block threshold se neeche = allow; alert/block dono model.json mein)
     const why = reply.mode === "prevent" ? `allow ${fmtP(reply.attack_proba)}` : "allow";
     if (kind === "attack" || !values.quiet) {
       console.log(`${clock()}  ${device.name}  ${tag}  ${row.label.padEnd(24)} 202  ${why}  ${ms}ms`);
@@ -335,7 +335,7 @@ console.log(`gateway     : ${stats.allowed} aage gaye (allow), ${stats.blocked} 
 for (const [reason, n] of Object.entries(stats.blockReasons)) console.log(`block reason: ${reason}  x${n}`);
 if (stats.prevent) {
   console.log(`prevent     : attack ${stats.prevAttack} mein se ${stats.prevAttackBlocked} roke, ` +
-    `${stats.prevAttack - stats.prevAttackBlocked} nikal gaye   (0.5-0.9 = alert, block nahi)`);
+    `${stats.prevAttack - stats.prevAttackBlocked} nikal gaye   (score block threshold se neeche - ml/model.json)`);
   console.log(`galat block : benign ${stats.prevBenign} mein se ${stats.prevBenignBlocked} roke   (ye 0 hona chahiye)`);
 } else if (stats.ok > stats.noAction) {
   // (purani API mode batati hi nahi - tab "sab detect" kehna jhooth hota, isliye ye shart)
