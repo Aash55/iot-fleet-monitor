@@ -1,4 +1,4 @@
-# ml/pool.py   <-- ye P9-a pe daalni hai (NAYI file)
+# ml/pool.py   <-- ye P9-d pe badli (P9-a: NAYI file; P9-d: sirf comments - extract.js hat gayi)
 #
 # Kaam: data/ ke saare CICIoT2023 CSV (13 GB, ~170 file) EK baar padho, aur har label
 # (BenignTraffic + 33 attack types) se ek random, fixed-size sample nikaalo. Phir har row
@@ -33,7 +33,7 @@ OUT_STATS = DATA_DIR / "pool_stats.json"
 SEED = 42
 BENIGN = "BenignTraffic"
 
-# extract.js wale wahi 10 feature (NORMALIZED naam). iat pool mein rehta hai (simulator ka
+# Wahi 10 feature jo P1 se lock hain (pehle api/scripts/extract.js mein; NORMALIZED naam). iat pool mein rehta hai (simulator ka
 # format same rahe); model train.py mein use nahi karta (leak).
 FEATURES = [
     "flow_duration", "header_length", "protocol_type", "duration", "rate",
@@ -47,7 +47,7 @@ CUTS = [("test", 0.15), ("val", 0.15), ("demo", 0.05)]
 
 
 def normalize(name):
-    # extract.js jaisa: "Tot size" -> tot_size, "Header_Length" -> header_length
+    # P1 wala normalize: "Tot size" -> tot_size, "Header_Length" -> header_length
     return "_".join(name.strip().lower().replace("-", " ").split())
 
 

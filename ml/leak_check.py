@@ -1,4 +1,4 @@
-# ml/leak_check.py   <-- ye P4 f-step 1 pe ml/ mein daalni hai
+# ml/leak_check.py   <-- ye P9-d pe badli (P4 f-step 1: nayi; P9-d: sirf hint - samples ab ml/demo.py se)
 #
 # Kaam: P3.4 ka shak check karna - kya "iat" column model ko jawab chupke se bata raha hai?
 # (leak = aisi jaankari jo asli duniya mein prediction ke waqt nahi milegi, par data mein hai)
@@ -20,14 +20,14 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import f1_score
 from sklearn.model_selection import train_test_split
 
-# extract.js ne ye file banayi thi (gitignored, sirf tere laptop pe hai)
+# ml/demo.py ye file banata hai (P9-d; pehle extract.js) - gitignored, sirf tere laptop pe hai
 DEFAULT = Path(__file__).resolve().parent.parent / "api" / "scripts" / "samples.local.json"
 SAMPLES = Path(os.environ.get("SAMPLES", DEFAULT))
 SEED = 42  # har baar same split + same trees -> tere aur mere numbers compare ho sakein
 
 if not SAMPLES.exists():
     print(f"FAIL: sample file nahi mili: {SAMPLES}")
-    print("      api/ folder se pehle chala:  npm run extract -- 2000")
+    print("      ml/ folder se pehle chala:  uv run python demo.py")
     sys.exit(1)
 
 data = json.loads(SAMPLES.read_text(encoding="utf-8"))

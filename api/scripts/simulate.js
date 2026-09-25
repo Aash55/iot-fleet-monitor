@@ -1,4 +1,4 @@
-// api/scripts/simulate.js   <-- ye f-step P7-f3 pe daalni hai (P1 3.1/3.2: simulator; P6.3-f3: --fleet flag; P7-f3: gateway/PEP)
+// api/scripts/simulate.js   <-- ye f-step P9-d pe daalni hai (P1 3.1/3.2: simulator; P6.3-f3: --fleet flag; P7-f3: gateway/PEP; P9-d: samples ab ml/demo.py se)
 //
 // Kaam: sim device ban ke asli CICIoT2023 rows ko POST /ingest pe bhejna.
 //   f-step 3.1 -> config + file load + row chunna + --dry-run self-check
@@ -20,8 +20,8 @@ import path from "node:path";
 import { DEFAULT_FLEET, fleetPath } from "./fleetFile.js";
 
 // ---------------- 1. Tuning constants ----------------
-// Asli fleet mostly BENIGN hoti hai. samples file mein 2000 benign + 2000 attack
-// hai (50/50), par 50/50 bhejne se dashboard hamesha laal rahega aur demo nakli
+// Asli fleet mostly BENIGN hoti hai. samples file (ml/demo.py, P9-d) mein ~10k benign +
+// ~9k attack hai, par aadha-aadha bhejne se dashboard hamesha laal rahega aur demo nakli
 // lagega. Isliye default mein sirf 3% attack. --anomaly demo ke liye hai.
 const ATTACK_RATIO_NORMAL = 0.03;
 const ATTACK_RATIO_ANOMALY = 0.4;
@@ -87,7 +87,7 @@ async function loadLocalJson(file, hint) {
 }
 
 const fleet = await loadLocalJson(FLEET_FILE, `Pehle chalao:  provision ... --fleet ${values.fleet}`);
-const samples = await loadLocalJson(SAMPLES_FILE, "Pehle chalao:  npm run extract -- 2000");
+const samples = await loadLocalJson(SAMPLES_FILE, "Pehle chalao (ml/ folder se):  uv run python demo.py");
 
 if (!Array.isArray(fleet.devices) || fleet.devices.length === 0) {
   console.error(`${values.fleet} mein ek bhi device nahi hai`);

@@ -1,4 +1,4 @@
-<!-- README.md -> ye f-step P8-d2 pe daalni hai (P6.4: diagram + screenshots + cold start; P5-f5: ML section; P7-f5: IPS mode; P8-d2: redesign screenshots + 13 tests) -->
+<!-- README.md -> ye f-step P9-d pe daalni hai (P6.4: diagram + screenshots + cold start; P5-f5: ML section; P7-f5: IPS mode; P8-d2: redesign screenshots + 13 tests; P9-d: ML section naye data/model/thresholds ke saath) -->
 # IoT Fleet Monitor
 
 Devices send telemetry over HTTP. The API accepts it fast, queues it in a Redis stream,
@@ -31,7 +31,9 @@ apart; the chart keeps the real time gap between them. Each violet ✕ is a read
 the gateway to block (score 0.90 or higher). The one red dot is a `MITM-ArpSpoofing` attack
 the model scored 0.68: it raised an alert but was not blocked, because 0.5 to 0.9 is alert-only.
 Across both runs this device got 15 attacks, 14 were blocked, and 0 of 20 benign readings were
-blocked. The tooltip is on a blocked reading.
+blocked. The tooltip is on a blocked reading. Both screenshots were taken with the first model and its
+thresholds (alert 0.5, block 0.9). The current model alerts at 0.872 and blocks at 0.931
+(see [ML](#ml-intrusion-detection)).
 
 ![Device page in prevent mode with blocked markers, one red attack dot and a tooltip](docs/screenshots/device-prevent.png)
 
@@ -104,12 +106,29 @@ at build time. Missing, it would silently become `undefined`, so `vite.config.js
 ## ML: intrusion detection
 
 **Data.** CICIoT2023 from the Canadian Institute for Cybersecurity, University of New Brunswick
-(Neto et al., *Sensors* 23(13):5941, 2023, https://doi.org/10.3390/s23135941). The model is
-**binary**: benign vs attack (all 33 attack types in one class). I sampled 4,000 rows
-(2,000 benign, 2,000 attack) and split them 80/20, stratified: 3,200 to train, 800 held out.
+(Neto et al., *Sensors* 23(13):5941, 2023, https://doi.org/10.3390/s23135941). The CSV release
+is 169 files, 13.8 GB, 46,686,579 rows: benign traffic plus 33 attack types. The model is
+**binary**: benign vs attack. Benign is only 2.4% of the dataset, the opposite of a real network.
 
-**The leak I found first.** With one feature, `iat`, the model scored F1 **0.991**. That was too
-good. The values showed why: benign `iat` is 0 or about 166.5 million, attacks sit near
+**Sampling (`ml/pool.py`).** One pass over all 169 files with 4 worker processes, about 96 s on
+my laptop. Each worker reads one file at a time and keeps only 11 of its 47 columns. Every
+row gets a seeded random tag, and each label keeps the rows with the smallest tags (bottom-k
+sampling). Per-file results merge exactly, so the sample does not depend on the number of
+workers or the order in which files finish. Caps: 6,000 rows per attack type and 200,000
+benign, 383,091 rows in total. Rare types are kept whole (`Uploading_Attack` has 1,252 rows in
+the entire dataset). Each label is then split four ways, and no row is in two splits:
+
+| Split | Share | Used for |
+|---|---|---|
+| train | 65% | fitting the model |
+| validation | 15% | choosing the model and both thresholds |
+| test | 15% | the final numbers, run once |
+| demo | 5% | the simulator |
+
+Only 0.7% of test rows have an exact twin (same 9 feature values) in train. Floods repeat.
+
+**The leak I found first.** With one feature, `iat`, the first model scored F1 **0.991**. That
+was too good. The values showed why: benign `iat` is 0 or about 166.5 million, attacks sit near
 83 million, and each attack type has its own narrow band (DoS-TCP 82.93-82.96M, Mirai
 83.68-83.79M). The number records *which capture session* a row came from, not packet
 timing, so the model was learning the recording setup. I removed `iat`
@@ -117,32 +136,83 @@ timing, so the model was learning the recording setup. I removed `iat`
 feature importances, so low importance does not prove a feature is innocent. Correlated
 features share importance. The test is to train with the feature alone and without it.
 
-**Model and results.** Random Forest, 100 trees, 9 features (`ml/model.json` has the list and
-order). On the 800 held-out rows (400 benign, 400 attack):
+**Why the first headline number was misleading.** The first model (4,000 sampled rows) reported
+recall 0.968 on 800 test rows. That test set followed the dataset's mix, which is mostly DDoS
+floods, and floods are easy. On the new validation split, where every attack type counts the
+same, the same model caught 0.60 of attacks, and 10 of the 33 types stayed under 20%
+(DDoS-SlowLoris 0.01, VulnerabilityScan 0.02). So this README reports two recalls:
 
-| | Predicted attack | Predicted benign |
-|---|---|---|
-| **Actual attack** | 387 (TP) | 13 (FN) |
-| **Actual benign** | 2 (FP) | 398 (TN) |
+- **macro**: the average of the 33 per-type recalls, so every attack type counts the same
+- **natural**: per-type recall weighted by how common each type is in the dataset
 
-Precision 0.995, recall 0.968, F1 **0.981**, false-positive rate 0.005.
+**Learning curve (`ml/curve.py`, validation set, threshold 0.5).** Training sizes of 2k, 20k and
+100k rows per class (benign N + attack N, with attack rows spread evenly over the 33 types),
+with trees either unlimited or capped at 1,000 leaves:
 
-**Why that precision will not hold in a real fleet.** The test set is 50% attacks. A fleet is
-mostly benign. At the simulator's 3% attack rate, the same recall and false-positive rate give
-precision of about **0.86**. And that FPR comes from only 2 mistakes in 400 benign rows, so
-its 95% range (Clopper-Pearson) puts precision anywhere from **0.63 to 0.98**. More benign test
-data is needed before trusting the number.
+| Training rows per class | Trees | Recall | False-positive rate | ONNX file |
+|---|---|---|---|---|
+| 2k | unlimited | 0.900 | 0.086 | 2.4 MB |
+| 20k | unlimited | 0.924 | 0.075 | 19.0 MB |
+| 100k | unlimited | 0.931 | 0.058 | 83.5 MB |
+| 2k | max 1,000 leaves | 0.900 | 0.088 | 2.4 MB |
+| 20k | max 1,000 leaves | 0.922 | 0.081 | 7.8 MB |
+| 100k | max 1,000 leaves | 0.926 | 0.069 | 7.8 MB |
 
-`class_weight="balanced"` is set, but on 50/50 data both weights come out as 1.00, so it does
-not fix any imbalance here.
+Unlimited trees grow with the data. The API runs on a 512 MB free instance, so the model file
+budget is 10 MB, and capped trees stay at 7.8 MB.
 
-**Serving: ONNX inside the Node API.** `ml/train.py` exports the model to ONNX, and the
-consumer runs it with `onnxruntime-node` in the same process. On all 800 test rows the Node
-output matches scikit-learn: max probability difference 1.1e-7, zero label mismatches
-(`npm run parity`), about 6 microseconds per row. On Render's free instance the model loads in
-under a second at startup and the process uses about 127 MB of the 512 MB limit.
-Rejected: a separate Python service (a second free service to host and wake up, plus a network
-hop per batch).
+**My mistake in that table.** At 0.5 the new models flag 6-9% of benign rows; the first model
+flagged 0.4%. Recall at different false-positive rates is not a fair comparison, because a lower
+threshold buys recall for any model. At the simulator's 3% attack rate, a 0.5 threshold would
+have given precision of about 0.3: seven of ten alerts false.
+
+**Same false-positive rate (`ml/compare.py`, validation set).** Each model gets its own
+threshold, set so that at most 0.5% (or 0.1%) of benign validation rows are flagged:
+
+| Model | AUC | Macro recall, FPR ≤ 0.5% | Macro recall, FPR ≤ 0.1% | ONNX file |
+|---|---|---|---|---|
+| first model (3,200 training rows) | 0.930 | 0.575 | 0.513 | 0.4 MB |
+| 20k, capped | 0.977 | 0.701 | 0.591 | 7.8 MB |
+| **100k, capped (chosen)** | **0.980** | **0.725** | **0.639** | **7.8 MB** |
+| 100k, unlimited | 0.984 | 0.756 | 0.669 | 83.5 MB |
+
+More data still helps (20k to 100k adds 2.4 points), and the 10 MB cap costs about 3 points
+against the unlimited model.
+
+**Final model and test (`ml/train.py`; the test set was used once).** Random Forest, 100 trees,
+at most 1,000 leaves per tree, 9 features (`ml/model.json` has the list and order), 200,000
+training rows. Both thresholds were chosen on validation: **alert** at score ≥ 0.872 (benign
+FPR ≤ 0.5%) and **block** at ≥ 0.931 (≤ 0.1%). On the 57,464 test rows (27,464 attack, 30,000
+benign), AUC 0.980:
+
+| | Threshold | False positives | Macro recall | Natural recall | Precision at 3% attacks |
+|---|---|---|---|---|---|
+| **Alert** | 0.872 | 121 of 30,000 (0.40%) | **0.721** | 0.983 | 0.85 |
+| **Block** | 0.931 | 31 of 30,000 (0.10%) | **0.634** | 0.979 | 0.95 |
+| First model, alert | 0.480 | 124 of 30,000 (0.41%) | 0.577 | 0.978 | 0.81 |
+
+At the same false-positive rate, macro recall went from 0.577 to 0.721. The last column
+assumes a fleet with 3% attacks (the simulator's default): precision =
+r·R / (r·R + FPR·(1 − r)), with r = 0.03 and R = macro recall.
+
+**Where it fails.** Flood and fragmentation attacks (the DDoS, DoS and Mirai floods) are caught
+at 0.96 or more, except DoS-HTTP_Flood at 0.90. Slow and content-based attacks are not (alert
+threshold, test set): DDoS-SlowLoris 0.36, DictionaryBruteForce 0.24, BrowserHijacking 0.28, Recon-OSScan 0.28, DNS_Spoofing 0.35,
+XSS 0.40, SqlInjection 0.47, MITM-ArpSpoofing 0.48. The 9 features describe a flow's size,
+rate, duration and TCP flags. At that level an XSS or SQL injection request looks like any
+other small web request, because the attack is in the payload, which these features never see.
+In the CICIoT2023 paper's own results, reconnaissance was also often confused with benign
+traffic.
+
+**Serving: ONNX inside the Node API.** `ml/train.py` exports the model to ONNX, and the API and
+consumer run it with `onnxruntime-node` in the same process. On all 57,464 test rows the Node
+output matches scikit-learn: max probability difference 6.1e-7, zero label mismatches
+(`npm run parity`), about 3 microseconds per row on my laptop. On Render's free instance the
+model loads in 2.3 s at startup, and the process grows from 89 MB to 210 MB of the 512 MB limit.
+Both thresholds live in `ml/model.json`, next to the model, not in the code: a new model gives
+new scores, so it brings its own thresholds. If they are missing, or alert is above block, the
+API treats the model as unavailable. Rejected: a separate Python service (a second free service
+to host and wake up, plus a network hop per batch).
 
 **Failure behaviour.** If the model cannot load, the API still starts, `/status` reports
 `"model": "unavailable"`, and readings are stored with a `NULL` score. A missing or
@@ -153,10 +223,10 @@ for a real `is_attack = true`.
 counted by `received_at` (the API's clock, not the device's). There is no separate alerts
 table, because an alert has no state of its own yet (no acknowledge or resolve).
 
-**Caveat about the live demo.** The simulator replays rows from the same 4,000-row sample,
-and 80% of those rows were training data. So a red dot in the demo shows that the pipeline
-works end to end. It is **not** evidence of accuracy. The accuracy evidence is the held-out
-table above.
+**The live demo.** The simulator replays the demo split (`ml/demo.py` writes
+`api/scripts/samples.local.json`): 10,000 benign and 9,154 attack rows that the model never saw
+in training, validation or test. The first sample was different: 80% of its rows were training
+data, so a red dot then only proved the pipeline worked.
 
 ## IPS mode: detect or prevent
 
@@ -176,26 +246,13 @@ audit record of what was stopped and why. The reply is 202 even for a block. The
 valid and was recorded, and the decision is in the body, so a client does not mistake a block
 for a failed request.
 
-**Two thresholds: 0.5 to alert, 0.9 to block.** Same 800 held-out rows and the same exported
-ONNX model as above (`ml/threshold_check.py`):
-
-| Block if score ≥ | TP | FN | FP | TN | Recall | FPR |
-|---|---|---|---|---|---|---|
-| 0.50 | 387 | 13 | 2 | 398 | 0.9675 | 0.0050 |
-| 0.60 | 387 | 13 | 1 | 399 | 0.9675 | 0.0025 |
-| 0.70 | 386 | 14 | 0 | 400 | 0.9650 | 0 |
-| 0.80 | 386 | 14 | 0 | 400 | 0.9650 | 0 |
-| **0.90** | **385** | **15** | **0** | **400** | **0.9625** | **0** |
-| 0.95 | 380 | 20 | 0 | 400 | 0.9500 | 0 |
-| 0.99 | 364 | 36 | 0 | 400 | 0.9100 | 0 |
-
-A wrong alert is a stray red dot. A wrong block drops a real device's data, so blocking needs
-a higher bar. 0.70 is the first row with no false positives, but one benign row sits between
-0.6 and 0.7, right at that edge. The threshold was also picked on the same 800 rows it is
-measured on, so these numbers are optimistic. 0.90 adds margin, and the cost is one more
-missed attack than at 0.70 (385 vs 386 caught). "0 FP" is also not "never": with 0 mistakes in
-400 benign rows, the rule of three puts the real false-positive rate as high as about 0.0075
-(95%). A proper fix is to choose the threshold on a separate validation split.
+**Two thresholds, both chosen on the validation split.** Alert at 0.872 (at most 0.5% of benign
+validation rows flagged) and block at 0.931 (at most 0.1%). A wrong alert is a stray red dot.
+A wrong block drops a real device's data, so blocking gets the stricter limit. Between the two,
+the model raises an alert but the gateway lets the reading through. On the test set, the block
+threshold stopped 31 of 30,000 benign rows (0.10%) and 63% of attacks averaged over the 33
+types (98% on the dataset's natural mix). Until then the block threshold was 0.9, picked on the
+same 800 test rows it was measured on, which made its numbers optimistic.
 
 **Fail open or fail closed, depending on whose fault it is.**
 - The model did not load (our fault): **allow**, with `reason: "model_unavailable"`, logged
@@ -205,17 +262,17 @@ missed attack than at 0.70 (385 vs 386 caught). "0 FP" is also not "never": with
   one field.
 
 **What it cannot stop.**
-- At 0.5, the model missed all 4 `MITM-ArpSpoofing` rows in the test set, and the single test
-  row of each of `Recon-OSScan`, `DNS_Spoofing` and `DoS-HTTP_Flood`. Spoofing and scanning
-  look like normal traffic in these 9 flow features. The counts are tiny (1 to 4 rows per type),
-  so this is a pattern to check, not a measured rate.
+- Slow and content-based attacks (see [Where it fails](#ml-intrusion-detection)). Even at the alert
+  threshold only about a quarter to a half of reconnaissance, spoofing, brute-force and web
+  attacks are caught, and the stricter block threshold stops fewer. These 9 flow features cannot
+  see a payload.
 - No IP blocklist. CICIoT2023's features do not include the attacker's IP, so the system blocks
   a reading (a flow), not a source.
 - Each reading is scored on its own. There is no memory of a device's recent behaviour.
 
 **Latency.** Prevent replies carry a `Server-Timing: predict;dur=...` header, so the model's
 share of each request is visible in DevTools or Postman. In a Linux test environment (not on
-Render) scoring one row took about 0.15 ms (p50), and `/ingest` took about 2.5 ms (p50) in
+Render, first model) scoring one row took about 0.15 ms (p50), and `/ingest` took about 2.5 ms (p50) in
 both modes. From my laptop a prevent request took about 220 ms, but requests that never reach
 the model (`missing_features`) took just as long, so that time is not the model.
 
@@ -265,6 +322,7 @@ Needs Node 24, PostgreSQL and a Redis-compatible server on `127.0.0.1:6379`.
 4. The web app has login only. Create a user first with `POST /auth/register`
    (JSON body `email`, `password`), for example from Postman. Then log in and add a device.
    `npm run provision` and `npm run simulate` (in `api/`) create devices and send readings.
+   The simulator reads `api/scripts/samples.local.json`, which `ml/demo.py` writes.
 
 ## How to run tests
 
@@ -288,11 +346,11 @@ npm test
 
 Expected: `pass 13` and `fail 0`.
 
-The model has two checks of its own. Both need the sample file `api/scripts/samples.local.json`,
-which `npm run extract` (in `api/`) builds from the CICIoT2023 CSVs in `data/`. Neither is in the
-repo. `cd ml && uv run python train.py` retrains, exports and ends with `SELF-CHECK PASS`; it also
-writes the test rows that `cd api && npm run parity` then uses to compare the Node output with
-scikit-learn.
+The model pipeline needs the CICIoT2023 CSVs in `data/` (not in the repo). From `ml/`, in order:
+`uv run python pool.py` (sample and the four splits), `curve.py` (learning curve), `compare.py`
+(same-FPR comparison and thresholds), `train.py` (final model, test set once, ONNX export) and
+`demo.py` (the simulator's sample). Each ends with `SELF-CHECK PASS`. Then `cd api && npm run parity`
+compares the Node output with scikit-learn on every test row.
 
 The deployed stack (API on Render, web on Vercel) is checked with Postman collections that
 assert on body content, not only status codes: the JSON health reply, the CORS header and the
@@ -300,6 +358,5 @@ current JavaScript bundle name. These collections are kept outside the repo.
 
 ## What's next
 
-- A separate demo sample that shares no rows with the training data, and a block threshold
-  chosen on a separate validation split instead of the test set.
+- Payload-level features for the web attacks (XSS, SQL injection), which flow features cannot see.
 - Idempotency key on `/ingest`, a Content-Security-Policy header, retry with backoff in the consumer.
