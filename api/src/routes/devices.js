@@ -1,4 +1,4 @@
-// api/src/routes/devices.js  -> ye f-step P7-f4a pe daalni hai (P3.1; P5-f3: recent_attacks + score; P7-f1: mode + PATCH; P7-f4a: recent_blocked + action)
+// api/src/routes/devices.js  -> ye f-step P9-c2 pe daalni hai (P3.1; P5-f3: recent_attacks + score; P7-f1: mode + PATCH; P7-f4a: recent_blocked + action; P9-c2: comment - thresholds model.json se)
 import { Router } from "express";
 import { z } from "zod";
 import { pool } from "../db.js";
@@ -38,7 +38,7 @@ const RECENT_ATTACKS_SQL = `(SELECT count(*)::int FROM readings r
 
 // P7-f4a: "N blocked · 15 min" badge. recent_attacks jaisa hi: same 15 min, same received_at.
 // Do alag ginti kyun: recent_attacks = model ne attack KAHA (detect + prevent dono);
-// recent_blocked = gateway ko ROKNE ko kaha (sirf prevent). 0.5-0.9 wali reading pehle mein
+// recent_blocked = gateway ko ROKNE ko kaha (sirf prevent). alert aur block threshold ke beech wali reading pehle mein
 // aati hai, doosre mein nahi. action NULL (detect / purani rows) -> 'blocked' nahi -> nahi ginta.
 const RECENT_BLOCKED_SQL = `(SELECT count(*)::int FROM readings r
        WHERE r.device_id = devices.id AND r.action = 'blocked'

@@ -1,8 +1,8 @@
-// api/src/model.js  -> ye f-step P7-f4a-fix pe daalni hai (P5-f1: loadModel; P5-f2: predict; P7-f4a-fix: proba 0..1 clamp)
+// api/src/model.js  -> ye f-step P9-c2 pe daalni hai (P5-f1: loadModel; P5-f2: predict; P7-f4a-fix: proba 0..1 clamp; P9-c2: thresholds model.json se)
 //
 // Kaam: API process start hote hi ml/model.onnx EK BAAR load karna, aur /status ko batana
 // ki model "loaded" hai ya "unavailable". P5-f2 mein consumer yahi session har reading pe
-// use karega - har reading pe dobara load karna 357 KB file ko baar-baar parse karna hota.
+// use karega - har reading pe dobara load karna MBs ki file ko baar-baar parse karna hota.
 //
 // Jaan-boojh ke "fail soft": model na mile to API band NAHI hoti. /ingest aur readings ka
 // store hona ML pe nirbhar nahi hai - ML sirf upar ki ek parat (alerts) hai. Isliye model
@@ -39,6 +39,14 @@ export async function loadModel() {
     const meta = JSON.parse(await readFile(path.join(ML_DIR, "model.json"), "utf8"));
     const k = meta.features?.length;
     if (!k) throw new Error("model.json mein features khaali");
+    // P9-c2: alert/block threshold model ke SAATH aate hain (val pe chune, train.py). Code mein
+    // hardcode NAHI: naya model = naye scores = naye threshold. Galat/gayab = model load hi nahi
+    // (-> "unavailable" -> IPS fail-open), aadha-adhoora faisla nahi.
+    const t = meta.thresholds;
+    const inRange = (v) => Number.isFinite(v) && v > 0 && v <= 1;
+    if (!inRange(t?.alert) || !inRange(t?.block) || t.alert > t.block) {
+      throw new Error(`model.json thresholds galat: ${JSON.stringify(t)} (0 < alert <= block <= 1 chahiye)`);
+    }
 
     const { size } = await stat(onnxPath);
     const session = await ort.InferenceSession.create(onnxPath);
@@ -59,7 +67,8 @@ export async function loadModel() {
     const ms = performance.now() - t0;
     console.log(
       `Model loaded: ${k} features, ${(size / 1024).toFixed(0)} KB, ${ms.toFixed(0)} ms, ` +
-        `rss ${mb(rssBefore)} -> ${mb(process.memoryUsage().rss)} MB`
+        `rss ${mb(rssBefore)} -> ${mb(process.memoryUsage().rss)} MB, ` +
+        `alert >= ${t.alert.toFixed(3)}, block >= ${t.block.toFixed(3)}`
     );
   } catch (err) {
     state.status = "unavailable";
@@ -72,11 +81,17 @@ export function modelStatus() {
   return state.status;
 }
 
+// P9-c2: ingest.js (prevent mode) isse block ka faisla leta hai. Model load nahi = null.
+export function blockThreshold() {
+  return state.meta?.thresholds.block ?? null;
+}
+
 let warnedUnavailable = false;
 
 // P5-f2: ek batch ki saari readings ek hi session.run mein (parity: 800 rows 4.8 ms).
 // Input : metrics objects ki list, jaise [{ flow_duration: 1.2, rate: 30, ... }, ...]
 // Output: HAR input ke liye { attack_proba, is_attack } ya null, same order mein.
+// is_attack = attack_proba >= thresholds.alert (P9-c2; pehle ONNX label = 0.5 tha).
 // null = "score nahi hua" (model nahi hai, ya koi feature gayab/number nahi). Reading phir
 // bhi store hoti hai - prediction na hona reading ko rokne ki wajah nahi. Kabhi throw nahi.
 export async function predict(metricsList) {
@@ -109,14 +124,13 @@ export async function predict(metricsList) {
       [input]: new state.ort.Tensor("float32", data.subarray(0, idx.length * k), [idx.length, k]),
     });
     const proba = out.probabilities.data; // har row ke 2: [benign, attack]
-    const label = out.label.data; // BigInt64Array; tie 0.5 pe 0 (sklearn jaisa)
     idx.forEach((inputRow, j) => {
       // P7-f4a-fix: float32 mein trees ka average kabhi 1 se ZARA upar aata hai (1.0000001 =
       // float32 mein 1 ke baad agla number). Prod (Render Linux) pe yahi hua: consumer ka
       // "0..1" check blocked readings DROP kar raha tha. Source pe hi 0..1 mein daba do -
       // ingest (prevent) aur consumer (detect) dono ko saaf number mile, DB mein bhi.
       const p = Math.min(1, Math.max(0, proba[j * 2 + 1]));
-      results[inputRow] = { attack_proba: p, is_attack: label[j] === 1n };
+      results[inputRow] = { attack_proba: p, is_attack: p >= state.meta.thresholds.alert };
     });
   } catch (err) {
     console.error(`Predict failed for ${idx.length} rows:`, errText(err));

@@ -1,17 +1,15 @@
-// api/src/routes/ingest.js  -> ye f-step P7-f2 pe daalni hai (P2: XADD; P7-f2: prevent mode = IPS faisla)
+// api/src/routes/ingest.js  -> ye f-step P9-c2 pe daalni hai (P2: XADD; P7-f2: prevent mode = IPS faisla; P9-c2: block threshold model.json se)
 import { Router } from "express";
 import { z } from "zod";
 import { redis, TELEMETRY_STREAM, STREAM_MAXLEN } from "../redis.js";
-import { predict, modelStatus } from "../model.js";
+import { predict, modelStatus, blockThreshold } from "../model.js";
 
 export const ingestRouter = Router();
 
-// P7-f2: block tabhi jab model kam se kam 90% pakka ho. 0.5 ya 0.70 kyun NAHI (P7-f0 table):
-// 0.70 pe FP 0 tha, par ek FP 0.6-0.7 ke beech tha - bilkul kinare pe. Aur threshold usi test set
-// pe chuna tha, to numbers optimistic hain. 0.90 = margin; keemat: 800 mein sirf 1 aur attack miss.
-// 0.5-0.9 = model "attack" kehta hai (is_attack = true, dashboard pe alert), par block NAHI:
-// galat block = sahi device ka data kho gaya.
-export const BLOCK_THRESHOLD = 0.9;
+// P9-c2: block threshold ab model.json se (train.py ne VALIDATION pe chuna: benign pe FPR <= 0.1%).
+// Pehle 0.9 hardcode tha, jo TEST set pe chuna gaya tha (P7) - wo leakage thi. Alert threshold
+// (FPR <= 0.5%) aur block ke beech = model "attack" kehta hai (is_attack, dashboard pe alert), par
+// block NAHI: galat block = sahi device ka data kho gaya, isliye block ki limit zyada sakht.
 
 const readingInput = z.object({
   // Device clock, ISO-8601. Optional: if the device does not send one we stamp it.
@@ -33,7 +31,7 @@ async function decide(metrics) {
 
   if (pred) {
     return {
-      action: pred.attack_proba >= BLOCK_THRESHOLD ? "block" : "allow",
+      action: pred.attack_proba >= blockThreshold() ? "block" : "allow",
       reason: "score",
       pred,
       ms,

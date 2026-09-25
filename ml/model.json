@@ -19,18 +19,101 @@
     "probabilities"
   ],
   "positive_class": 1,
+  "thresholds": {
+    "alert": 0.8719666004180908,
+    "block": 0.9307171702384949,
+    "chosen_on": "val",
+    "alert_max_fpr": 0.005,
+    "block_max_fpr": 0.001
+  },
+  "training": {
+    "source": "CICIoT2023, ml/pool.py sample (P9-a)",
+    "rows": 200000,
+    "per_bucket": 100000,
+    "attack_types": 33,
+    "model": "RandomForest",
+    "n_estimators": 100,
+    "max_leaf_nodes": 1000,
+    "class_weight": "balanced",
+    "onnx_mb": 7.8,
+    "train_s": 10.0
+  },
   "versions": {
     "scikit-learn": "1.9.1",
     "skl2onnx": "1.20.0",
     "onnxruntime": "1.30.0"
   },
   "test": {
-    "rows": 800,
-    "precision": 0.9949,
-    "recall": 0.9675,
-    "f1": 0.981,
-    "fpr": 0.005,
-    "precision_at_sim_ratio": 0.8568,
-    "sim_attack_ratio": 0.03
+    "rows": 57464,
+    "attack": 27464,
+    "benign": 30000,
+    "auc": 0.9802,
+    "sim_attack_ratio": 0.03,
+    "alert": {
+      "tp": 20503,
+      "fn": 6961,
+      "fp": 121,
+      "tn": 29879,
+      "fpr": 0.004,
+      "macro_recall": 0.7211,
+      "natural_recall": 0.9833,
+      "precision_at_3pct": 0.8468
+    },
+    "block": {
+      "tp": 18446,
+      "fn": 9018,
+      "fp": 31,
+      "tn": 29969,
+      "fpr": 0.001,
+      "macro_recall": 0.6343,
+      "natural_recall": 0.9787,
+      "precision_at_3pct": 0.95
+    },
+    "old_p4_at_alert": {
+      "threshold": 0.48,
+      "tp": 16771,
+      "fn": 10693,
+      "fp": 124,
+      "tn": 29876,
+      "fpr": 0.0041,
+      "macro_recall": 0.5767,
+      "natural_recall": 0.9783,
+      "precision_at_3pct": 0.8119
+    },
+    "per_type_recall_at_alert": {
+      "Backdoor_Malware": 0.5507,
+      "BrowserHijacking": 0.2753,
+      "CommandInjection": 0.5302,
+      "DDoS-ACK_Fragmentation": 0.98,
+      "DDoS-HTTP_Flood": 0.96,
+      "DDoS-ICMP_Flood": 0.9944,
+      "DDoS-ICMP_Fragmentation": 0.9767,
+      "DDoS-PSHACK_Flood": 0.9989,
+      "DDoS-RSTFINFlood": 0.9967,
+      "DDoS-SYN_Flood": 0.9989,
+      "DDoS-SlowLoris": 0.3622,
+      "DDoS-SynonymousIP_Flood": 1.0,
+      "DDoS-TCP_Flood": 0.9978,
+      "DDoS-UDP_Flood": 0.9933,
+      "DDoS-UDP_Fragmentation": 0.9767,
+      "DNS_Spoofing": 0.3489,
+      "DictionaryBruteForce": 0.2367,
+      "DoS-HTTP_Flood": 0.8967,
+      "DoS-SYN_Flood": 0.9956,
+      "DoS-TCP_Flood": 0.9922,
+      "DoS-UDP_Flood": 0.9833,
+      "MITM-ArpSpoofing": 0.4789,
+      "Mirai-greeth_flood": 0.9944,
+      "Mirai-greip_flood": 0.9711,
+      "Mirai-udpplain": 0.9989,
+      "Recon-HostDiscovery": 0.6189,
+      "Recon-OSScan": 0.2767,
+      "Recon-PingSweep": 0.354,
+      "Recon-PortScan": 0.4778,
+      "SqlInjection": 0.474,
+      "Uploading_Attack": 0.3511,
+      "VulnerabilityScan": 0.3589,
+      "XSS": 0.3951
+    }
   }
 }
