@@ -1,4 +1,4 @@
-<!-- README.md -> ye f-step P7-f5 pe daalni hai (P6.4: diagram + screenshots + cold start; P5-f5: ML section; P7-f5: IPS mode) -->
+<!-- README.md -> ye f-step P8-d2 pe daalni hai (P6.4: diagram + screenshots + cold start; P5-f5: ML section; P7-f5: IPS mode; P8-d2: redesign screenshots + 13 tests) -->
 # IoT Fleet Monitor
 
 Devices send telemetry over HTTP. The API accepts it fast, queues it in a Redis stream,
@@ -15,25 +15,30 @@ block it. Built solo, deployed on free tiers.
 
 ## Screenshots
 
-Device page: status badge and the live chart (refreshes every 5 seconds).
+The screens were redesigned in Claude Design and then built in React 19 + Tailwind 4.
+Colour carries meaning only: **red** = the model flagged an attack, **violet** = blocked in
+prevent mode, **green** = online, **amber** = something needs your attention (an error, the
+one-time API key). Both screenshots are from a local run with the simulator in `--anomaly` mode.
 
-![Device page with status and live chart](docs/screenshots/device-chart.png)
+Devices list: each chip counts the last 15 minutes. Device 22 runs in prevent mode, so it has
+a violet "blocked" chip next to its red "attacks" chip; the others run in detect mode and only
+raise alerts.
 
-Attack alerts: the red badge counts readings the model flagged in the last 15 minutes, and
-red dots on the chart mark them (local run with the simulator in `--anomaly` mode).
+![Devices list with prevent, attack, blocked and online chips](docs/screenshots/devices-list.png)
 
-![Device page with the attack badge and red attack dots](docs/screenshots/attack-chart.png)
+Device page in prevent mode (device 22, metric `syn_count`). Two simulator runs about 8 minutes
+apart; the chart keeps the real time gap between them. Each violet ✕ is a reading the API told
+the gateway to block (score 0.90 or higher). The one red dot is a `MITM-ArpSpoofing` attack
+the model scored 0.68: it raised an alert but was not blocked, because 0.5 to 0.9 is alert-only.
+Across both runs this device got 15 attacks, 14 were blocked, and 0 of 20 benign readings were
+blocked. The tooltip is on a blocked reading.
+
+![Device page in prevent mode with blocked markers, one red attack dot and a tooltip](docs/screenshots/device-prevent.png)
 
 Cold start: the API was asleep, so the `/status` request had to wait (see its Time column)
-before the header could say "API ok, database ok".
+before the header could say "API ok, database ok". This screenshot is from before the redesign.
 
 ![Cold start: the /status request in DevTools and the header after the API woke up](docs/screenshots/cold-start.png)
-
-Prevent mode (production, device 4): the black badge counts readings blocked in the last
-15 minutes, and each blocked reading is a ✕ on the chart. Both blocked readings were also
-attacks, so they show as ✕ instead of red dots.
-
-![Device page in prevent mode with the blocked badge and blocked markers](docs/screenshots/ips-blocked.png)
 
 ## Architecture
 
@@ -269,7 +274,10 @@ network and no running API are needed: the real JSON "ok" reply, an HTML page wi
 JSON without `status: "ok"`, broken JSON, and a 503. Two more check that only
 `is_attack === true` becomes a red dot on the chart. One checks that only
 `action === 'blocked'` becomes a ✕, and two check `setDeviceMode()`: it sends a `PATCH` with the
-token and `{ mode }`, and a 404 or 401 throws an `ApiError` carrying the status.
+token and `{ mode }`, and a 404 or 401 throws an `ApiError` carrying the status. Three check the
+header's colour (`healthTone()`): only the exact "API ok, database ok" text is grey, the first
+"Checking API..." has a hollow dot, and anything else (database down, HTTP error, unreachable)
+is amber.
 
 From the repo root, after `npm ci` in `web/`:
 
@@ -278,7 +286,7 @@ cd web
 npm test
 ```
 
-Expected: `pass 10` and `fail 0`.
+Expected: `pass 13` and `fail 0`.
 
 The model has two checks of its own. Both need the sample file `api/scripts/samples.local.json`,
 which `npm run extract` (in `api/`) builds from the CICIoT2023 CSVs in `data/`. Neither is in the
