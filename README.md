@@ -360,7 +360,7 @@ compares the Node output with scikit-learn on every test row.
 
 The deployed stack (API on Render, web on Vercel) is checked with Postman collections that
 assert on body content, not only status codes: the JSON health reply, the CORS header and the
-current JavaScript bundle name. These collections are kept outside the repo.
+current JavaScript bundle name.The API test collection is in api/postman/ (Postman v12 format). Open the folder in Postman, set baseUrl, token and apiKey, and run it.
 
 ## What's next
 

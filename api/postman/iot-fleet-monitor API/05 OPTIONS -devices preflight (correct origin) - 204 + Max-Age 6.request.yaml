@@ -1,0 +1,17 @@
+$kind: http-request
+name: 05 OPTIONS /devices preflight (correct origin) -> 204 + Max-Age 600
+url: "{{baseUrl}}/devices"
+method: OPTIONS
+headers:
+  Origin: "{{origin}}"
+  Access-Control-Request-Method: GET
+  Access-Control-Request-Headers: authorization
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('status 204', () => pm.response.to.have.status(204));
+      pm.test('Allow-Origin = the Vercel origin', () => pm.expect(pm.response.headers.get('Access-Control-Allow-Origin')).to.eql(pm.collectionVariables.get('origin')));
+      pm.test('Allow-Headers includes authorization', () => pm.expect((pm.response.headers.get('Access-Control-Allow-Headers') || '').toLowerCase()).to.include('authorization'));
+      pm.test('Access-Control-Max-Age = 600', () => pm.expect(pm.response.headers.get('Access-Control-Max-Age')).to.eql('600'));
+    language: text/javascript
+order: 4501923006041852

@@ -1,0 +1,27 @@
+$kind: http-request
+name: 02 POST /auth/register -> 201 returns token
+url: "{{baseUrl}}/auth/register"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: '{"email":"{{email}}","password":"{{password}}"}'
+scripts:
+  - type: beforeRequest
+    code: |-
+      // A fresh user on every run, so a second run does not get 409 "email already registered".
+      const stamp = Date.now();
+      pm.collectionVariables.set('email', `smoke-${stamp}@example.com`);
+      pm.collectionVariables.set('password', `smoke-pass-${stamp}`);
+    language: text/javascript
+  - type: afterResponse
+    code: |-
+      pm.test('status 201', () => pm.response.to.have.status(201));
+      const j = pm.response.json();
+      pm.test('returns the email in lowercase', () => pm.expect(j.user.email).to.eql(pm.collectionVariables.get('email')));
+      pm.test('returns a token', () => pm.expect(j.token).to.be.a('string').and.not.empty);
+      pm.test('Cache-Control: no-store', () => pm.expect(pm.response.headers.get('Cache-Control')).to.eql('no-store'));
+      pm.collectionVariables.set('token', j.token);
+    language: text/javascript
+order: 1391523005040314

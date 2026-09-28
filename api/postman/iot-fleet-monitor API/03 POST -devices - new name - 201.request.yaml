@@ -1,0 +1,29 @@
+$kind: http-request
+name: 03 POST /devices - new name -> 201
+url: "{{baseUrl}}/devices"
+method: POST
+headers:
+  Content-Type: application/json
+  Authorization: Bearer {{token}}
+body:
+  type: json
+  content: |-
+    {
+      "name": "smoke-{{run_stamp}}"
+    }
+scripts:
+  - type: beforeRequest
+    code: |-
+      pm.collectionVariables.set("run_stamp", String(Date.now()));
+    language: text/javascript
+  - type: afterResponse
+    code: |-
+      pm.test("201 + a new device starts offline with no last_seen", () => {
+        pm.response.to.have.status(201);
+        const d = pm.response.json().device;
+        pm.expect(d.status).to.eql("offline");
+        pm.expect(d.last_seen).to.eql(null);
+        pm.collectionVariables.set("device_id", String(d.id));
+      });
+    language: text/javascript
+order: 4102676809275850

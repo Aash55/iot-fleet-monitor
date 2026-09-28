@@ -1,0 +1,9 @@
+$kind: collection
+variables:
+  baseUrl: https://iot-fleet-monitor-api.onrender.com
+  origin: https://iot-fleet-monitor.vercel.app
+  email: ""
+  password: ""
+  token: ""
+  run_stamp: ""
+  device_id: ""
