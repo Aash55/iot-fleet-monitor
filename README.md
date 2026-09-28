@@ -9,8 +9,8 @@ a live chart, and the readings the model flagged as attacks. A device can also r
 block it. Built solo, deployed on free tiers.
 
 - **Live app:** https://iot-fleet-monitor.vercel.app
-- Demo login: `demo@fleetmonitor.dev` / `password123` · devices show live data only while the simulator runs (see screenshots in the repo)
 - **API health:** https://iot-fleet-monitor-api.onrender.com/status
+- - **Demo login:** `demo@fleetmonitor.dev` / `password123`. Charts show live data only while the simulator runs; the screenshots below show a real run.
 - **Note:** the API is on Render's free plan and sleeps after 15 minutes without traffic.
   The first request wakes it (see [Cold start](#cold-start-measured-not-guessed)).
 
