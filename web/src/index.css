@@ -1,9 +1,9 @@
 @import "tailwindcss";
 
-/* Tailwind 4 mein theme CSS ke andar hi set hota hai (tailwind.config.js nahi).
-   --font-sans badla = har jagah ki `font-sans` (aur body ka default) IBM Plex Sans.
-   Font file index.html ka Google Fonts <link> laata hai. Na aaye to baaki naam
-   (system font) chalte hain - page tootega nahi, bas font alag dikhega. */
+/* In Tailwind 4 the theme is set in CSS itself (no tailwind.config.js).
+   Overriding --font-sans makes every `font-sans` (and the body default) IBM Plex Sans.
+   The font file is loaded by the Google Fonts <link> in index.html. If it fails to load,
+   the fallback (system) fonts are used: the page does not break, the font just looks different. */
 @theme {
   --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 }

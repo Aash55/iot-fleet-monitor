@@ -1,8 +1,8 @@
-// "N blocked · 15 min". count = API ka recent_blocked (P7-f4a). AttackBadge jaisa hi:
-// 0 ya purana API (field hi nahi) -> kuch mat dikhao.
-// Laal NAHI: laal = "model ne attack kaha" (AttackBadge). Ye alag baat hai - "rok diya gaya".
-// P8-b: kaala -> violet (design). Kaala button (Log in, Add device) jaisa dikhta tha; violet
-// sirf "blocked" ke liye hai, isliye list mein turant alag pehchaan aata hai.
+// "N blocked · 15 min". count = API recent_blocked. Same as AttackBadge:
+// 0 or an older API (field missing) -> render nothing.
+// NOT red: red means "the model called it an attack" (AttackBadge). This means "was blocked".
+// Violet instead of black: black looked like the buttons (Log in, Add device); violet is used
+// only for "blocked", so it stands out in the list immediately.
 import { Chip } from './Chips.jsx'
 
 export default function BlockedBadge({ count }) {

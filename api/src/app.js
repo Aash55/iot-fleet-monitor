@@ -35,8 +35,9 @@ async function health(req, res) {
     }),
   ]);
 
-  // model 200/503 tay NAHI karta: ML na chale tab bhi readings store hoti hain. Aur Render
-  // /health pe 503 dekhe to naya deploy live hi nahi karta - ML ki galti poori API rok deti.
+  // The model does NOT decide 200 vs 503: readings are still stored when ML is down. Also,
+  // if Render sees 503 on /health it never puts a new deploy live - an ML fault would block
+  // the whole API.
   const ok = db === "up" && cache === "up";
   res
     .status(ok ? 200 : 503)
@@ -66,7 +67,7 @@ app.get("/me", noStore, requireAuth, async (req, res, next) => {
   }
 });
 
-// machine-facing routes: device API key. /ingest joins this group in P2.
+// machine-facing routes: device API key.
 app.get("/device/whoami", requireDevice, (req, res) => {
   res.json({ device: req.device });
 });

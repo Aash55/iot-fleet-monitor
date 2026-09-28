@@ -1,9 +1,10 @@
-// Device page pe Detect | Prevent. Click -> PATCH /devices/:id -> jawab ka naya device
-// parent ko (onChanged), jo cache mein daal deta hai. Screen tabhi badalti hai jab SERVER
-// haan bol de - pehle se "prevent" dikha dena (optimistic) galat hota agar PATCH fail ho.
-// P8-c: design ke "Saving..." mock mein naya button PEHLE hi kaala ho jaata tha (optimistic).
-// Wo copy NAHI kiya: Saving ke dauran PURANA mode hi kaala rehta hai, bas dono button dhundhle
-// + disabled + spinner. Kaala tabhi badalta hai jab device.mode (server ka jawab) badle.
+// Detect | Prevent on the device page. Click -> PATCH /devices/:id -> the updated device from
+// the response goes to the parent (onChanged), which writes it to the cache. The screen changes
+// only once the SERVER confirms; showing "prevent" up front (optimistic) would be wrong if the
+// PATCH failed. The design mock for "Saving..." turned the new button black immediately
+// (optimistic); that was NOT copied. While saving, the OLD mode stays black and both buttons are
+// just dimmed + disabled + spinner. The black highlight moves only when device.mode (the server
+// response) changes.
 import { useEffect } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { setDeviceMode } from './api.js'
@@ -14,8 +15,8 @@ const FOCUS = 'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visi
 
 const MODES = [
   { value: 'detect', label: 'Detect', help: 'Alerts only. Every reading is accepted.' },
-  // P9-e: number NAHI likha. Threshold ml/model.json mein hai (model ke saath badalta hai); UI mein
-  // hardcode 0.90 P9 ke baad galat ho gaya tha (asli 0.931).
+  // No number in the text on purpose. The threshold lives in ml/model.json (it changes with the
+  // model); a hardcoded 0.90 in the UI became wrong when the model changed (actual 0.931).
   { value: 'prevent', label: 'Prevent', help: 'High-confidence attacks are blocked. Lower scores only raise an alert.' },
 ]
 
@@ -30,7 +31,7 @@ export default function ModeToggle({ token, device, onChanged, onAuthError }) {
     if (authFailed) onAuthError()
   }, [authFailed, onAuthError])
 
-  // Purana API (mode field hi nahi) -> toggle mat dikhao, galat "detect" dikhana jhooth hoga.
+  // Older API (no mode field) -> hide the toggle; showing "detect" would be false.
   if (!MODES.some((m) => m.value === device.mode)) return null
 
   const current = MODES.find((m) => m.value === device.mode)
@@ -43,14 +44,14 @@ export default function ModeToggle({ token, device, onChanged, onAuthError }) {
 
   return (
     <div className="flex flex-col gap-3">
-      {/* Phone: sab ek ke neeche ek. 640px+: "Mode" | buttons | help, ek line mein. */}
+      {/* Phone: everything stacked. 640px+: "Mode" | buttons | help, on one line. */}
       <div
         aria-busy={saving || undefined}
         className="flex flex-col gap-2.5 rounded-xl border border-slate-200 bg-white p-4 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4 sm:px-5"
       >
         <span className="text-sm font-semibold">Mode</span>
-        {/* Segmented control: grey patti (track), andar do button, chuna hua kaala.
-            Phone pe grid-cols-2 = dono barabar chaude aur 40px oonche (ungli se dabana aasaan). */}
+        {/* Segmented control: grey track with two buttons inside; the selected one is black.
+            grid-cols-2 on phones = both equally wide and 40px tall (easy to tap). */}
         <div
           role="group"
           aria-label="Device mode"
@@ -59,7 +60,7 @@ export default function ModeToggle({ token, device, onChanged, onAuthError }) {
           }`}
         >
           {MODES.map((m) => {
-            const active = m.value === device.mode // SIRF server wala mode
+            const active = m.value === device.mode // ONLY the mode from the server
             return (
               <button
                 key={m.value}
@@ -78,7 +79,7 @@ export default function ModeToggle({ token, device, onChanged, onAuthError }) {
             )
           })}
         </div>
-        {/* aria-live: "Saving..." aur naya help text screen reader bhi bolta hai */}
+        {/* aria-live: screen readers also announce "Saving..." and the new help text */}
         <span aria-live="polite" className="inline-flex items-center gap-2 text-sm text-slate-600">
           {saving ? (
             <>

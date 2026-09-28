@@ -1,14 +1,14 @@
-# ml/train.py   <-- ye P9-c2 pe badli (P4: pehla model 4k rows; P9-c2: pool se, val pe threshold, test EK baar)
+# ml/train.py
 #
-# Kaam: B1 ka FINAL model. P9-c1 (compare.py) ne val pe chuna: capped 100k.
-#   - Random Forest, 100 trees, max_leaf_nodes 1000 (ONNX ~8 MB, Render budget 10 MB ke andar)
-#   - 9 features, iat NAHI (leak: ml/leak_check.py)
-#   - train: pool ke TRAIN hisse se 100k benign + 100k attack (33 types barabar, water-filling)
-#   - threshold VAL pe: alert = FPR <= 0.5%, block = FPR <= 0.1%  (andaze wala 0.5 / 0.9 khatam)
-#   - TEST pe sirf EK baar, sab chunne ke BAAD. Test dekh ke kuch badla to test ka number bekaar.
+# Trains the FINAL model. compare.py picked it on val: capped 100k.
+#   - Random Forest, 100 trees, max_leaf_nodes 1000 (ONNX ~8 MB, within the 10 MB Render budget)
+#   - 9 features, NO iat (leak: ml/leak_check.py)
+#   - train: 100k benign + 100k attack from the pool's TRAIN split (33 types evenly, water-filling)
+#   - thresholds on VAL: alert = FPR <= 0.5%, block = FPR <= 0.1%  (replaces the guessed 0.5 / 0.9)
+#   - TEST used only ONCE, AFTER everything is chosen. Changing anything after seeing test makes the test number worthless.
 #
 # Output: ml/model.onnx + ml/model.json (thresholds + test numbers) + ml/parity.local.json (Node check)
-# Chalana (Git Bash, ml/ folder se):   uv run python train.py
+# Run (Git Bash, from the ml/ folder):   uv run python train.py
 
 import json
 import os
@@ -34,7 +34,7 @@ COMPARE = HERE / "compare.json"
 SEED = 42
 BENIGN = "BenignTraffic"
 FEATURES = ["flow_duration", "header_length", "protocol_type", "duration", "rate",
-            "syn_count", "rst_count", "urg_count", "tot_size"]   # iat NAHI - ORDER yahi Node bhejta hai
+            "syn_count", "rst_count", "urg_count", "tot_size"]   # NO iat - this is the ORDER Node sends
 N_PER_BUCKET = 100_000
 RF_PARAMS = {"n_estimators": 100, "max_leaf_nodes": 1000, "class_weight": "balanced"}
 ALERT_FPR, BLOCK_FPR = 0.005, 0.001
@@ -43,14 +43,14 @@ BUDGET_MB = 10.0
 
 for p in (POOL, STATS, COMPARE):
     if not p.exists():
-        print(f"FAIL: {p.name} nahi mili (P9-a pool.py / P9-c1 compare.py pehle)")
+        print(f"FAIL: {p.name} not found (run pool.py / compare.py first)")
         sys.exit(1)
 
 z = np.load(POOL)
 stats = json.loads(STATS.read_text(encoding="utf-8"))
 compare = json.loads(COMPARE.read_text(encoding="utf-8"))
 if compare["pick"] != "capped 100k":
-    print(f"FAIL: compare.json ka pick '{compare['pick']}' hai - ye train.py capped 100k ke liye bani hai")
+    print(f"FAIL: compare.json pick is '{compare['pick']}' - this train.py is built for capped 100k")
     sys.exit(1)
 
 pool_features = list(z["features"])
@@ -65,7 +65,7 @@ attack_types = sorted(set(labels) - {BENIGN})
 seen = {t: stats["labels"][t]["seen"] for t in attack_types}
 
 
-def train_rows(n):   # curve.py / compare.py jaisa - same rows -> same model
+def train_rows(n):   # same as curve.py / compare.py - same rows -> same model
     avail = {t: int(((kind == t) & (split_id == TRAIN)).sum()) for t in attack_types}
     parts = [np.flatnonzero((kind == BENIGN) & (split_id == TRAIN) & (rank < n))]
     left, items = n, sorted(avail.items(), key=lambda kv: kv[1])
@@ -76,7 +76,7 @@ def train_rows(n):   # curve.py / compare.py jaisa - same rows -> same model
     return np.concatenate(parts)
 
 
-def threshold_for(p, yy, target):   # compare.py jaisa: FPR <= target wala sabse neeche threshold
+def threshold_for(p, yy, target):   # same as compare.py: the lowest threshold with FPR <= target
     b = np.sort(p[yy == 0])[::-1]
     return float(np.nextafter(b[int(np.floor(target * len(b)))], np.inf))
 
@@ -102,7 +102,7 @@ def onnx_proba(path, Xf):
     return label, proba[:, 1]
 
 
-# ---- 1. train (sirf TRAIN rows) ----
+# ---- 1. train (TRAIN rows only) ----
 idx = train_rows(N_PER_BUCKET)
 t0 = time.time()
 model = RandomForestClassifier(random_state=SEED, n_jobs=-1, **RF_PARAMS).fit(X[idx], y[idx])
@@ -110,14 +110,14 @@ train_s = time.time() - t0
 print(f"train: {len(idx):,} rows (benign {int((y[idx] == 0).sum()):,}, attack {int(y[idx].sum()):,})   "
       f"{train_s:.0f} s   nodes {sum(e.tree_.node_count for e in model.estimators_):,}")
 
-# ---- 1b. purana P4 model TEST pe - export use overwrite kare usse PEHLE. Sirf tulna ke liye;
-# threshold wahi jo compare.py ne VAL pe P4 ke liye chuna (FPR <= 0.5%). Dobara chalane pe
-# model.json mein pehle se likha number hi aage le jaao.
+# ---- 1b. the previous model on TEST - BEFORE the export overwrites it. For comparison only;
+# the threshold is the one compare.py chose on VAL for the previous model (FPR <= 0.5%). On a re-run,
+# carry forward the number already written in model.json.
 test = split_id == TEST
 X_test = X[test].astype(np.float32)
 y_test, k_test = y[test], kind[test]
 prev_meta = json.loads(META_PATH.read_text(encoding="utf-8")) if META_PATH.exists() else {}
-if "thresholds" not in prev_meta:     # abhi disk pe P4 model hai
+if "thresholds" not in prev_meta:     # the previous model is still on disk
     old_t = compare["results"][0]["at"][str(ALERT_FPR)]["threshold"]
     _, p_old = onnx_proba(MODEL_PATH, X_test)
     o = report(p_old, y_test, k_test, old_t)
@@ -125,14 +125,14 @@ if "thresholds" not in prev_meta:     # abhi disk pe P4 model hai
 else:
     old_test = prev_meta["test"].get("old_p4_at_alert")
 
-# ---- 2. ONNX export (jo ship hoga, usi se thresholds aur test) ----
+# ---- 2. ONNX export (thresholds and test use the same file that ships) ----
 onx = to_onnx(model, initial_types=[("input", FloatTensorType([None, len(FEATURES)]))],
               options={id(model): {"zipmap": False}})
 MODEL_PATH.write_bytes(onx.SerializeToString())
 mb = MODEL_PATH.stat().st_size / 1e6
 print(f"ONNX: {MODEL_PATH.name} {mb:.1f} MB (budget {BUDGET_MB:.0f})")
 
-# ---- 3. thresholds VAL pe (ONNX ke scores se - wahi Node dekhega) ----
+# ---- 3. thresholds on VAL (from ONNX scores - the same ones Node will see) ----
 val = split_id == VAL
 _, p_val = onnx_proba(MODEL_PATH, X[val].astype(np.float32))
 t_alert = threshold_for(p_val, y[val], ALERT_FPR)
@@ -141,7 +141,7 @@ c_alert, c_block = compare["alert_threshold"], compare["block_threshold"]
 print(f"\n[1] thresholds (VAL): alert {t_alert:.6f} (compare.json {c_alert})   "
       f"block {t_block:.6f} (compare.json {c_block})")
 
-# ---- 4. TEST - sirf ek baar. Iske baad kuch nahi badalna. ----
+# ---- 4. TEST - only once. Nothing changes after this. ----
 onnx_label, p_test = onnx_proba(MODEL_PATH, X_test)
 auc = roc_auc_score(y_test, p_test)
 alert = report(p_test, y_test, k_test, t_alert)
@@ -154,11 +154,11 @@ for name, r in rows_out:
     print(f"  {name:<7}{r['threshold']:>8.3f}{r['fpr']:>8.4f}{r['fp']:>6}{r['macro_recall']:>14.4f}"
           f"{r['natural_recall']:>9.4f}{r['precision_at_3pct']:>9.3f}")
 if old_test:
-    print(f"  {'old P4':<7}{old_test['threshold']:>8.3f}{old_test['fpr']:>8.4f}{old_test['fp']:>6}"
+    print(f"  {'old':<7}{old_test['threshold']:>8.3f}{old_test['fpr']:>8.4f}{old_test['fp']:>6}"
           f"{old_test['macro_recall']:>14.4f}{old_test['natural_recall']:>9.4f}{old_test['precision_at_3pct']:>9.3f}"
-          "   <- purana model, same FPR limit (val pe chuna)")
+          "   <- previous model, same FPR limit (chosen on val)")
 
-print("\n[3] alert pe har attack type ka recall (TEST) - kamzor upar")
+print("\n[3] recall for each attack type at alert (TEST) - weakest first")
 for ty in sorted(attack_types, key=lambda t: alert["per_type"][t]):
     bar = "#" * int(round(alert["per_type"][ty] * 20))
     print(f"  {ty:<24}{alert['per_type'][ty]:>7.3f}  {bar}")
@@ -179,8 +179,8 @@ META_PATH.write_text(json.dumps({
     "input": "input",
     "outputs": ["label", "probabilities"],
     "positive_class": 1,
-    # Node yahi padhta hai. Full precision (round NAHI): round karne se threshold k-th benign
-    # score se neeche aa sakta hai -> FPR limit se upar.
+    # Node reads this. Full precision (NOT rounded): rounding could move the threshold below the k-th
+    # benign score -> FPR above the limit.
     "thresholds": {"alert": t_alert, "block": t_block,
                    "chosen_on": "val", "alert_max_fpr": ALERT_FPR, "block_max_fpr": BLOCK_FPR},
     "training": {"source": "CICIoT2023, ml/pool.py sample (P9-a)", "rows": int(len(idx)),
@@ -196,24 +196,24 @@ META_PATH.write_text(json.dumps({
              "per_type_recall_at_alert": {t: r3(v) for t, v in alert["per_type"].items()}},
 }, indent=2) + "\n", encoding="utf-8", newline="\n")
 
-# Node (npm run parity) inhi rows pe ONNX chala ke ye probabilities milayega
+# Node (npm run parity) runs ONNX on these same rows and checks it gets these probabilities
 PARITY_PATH.write_text(json.dumps({
     "features": FEATURES,
     "rows": X[test].tolist(),
     "proba_attack": [round(float(p), 6) for p in sk_proba],
 }) + "\n", encoding="utf-8", newline="\n")
-print(f"    likha: {MODEL_PATH.name}, {META_PATH.name}, {PARITY_PATH.name}")
+print(f"    wrote: {MODEL_PATH.name}, {META_PATH.name}, {PARITY_PATH.name}")
 
 problems = []
 if mb > BUDGET_MB:
     problems.append(f"ONNX {mb:.1f} MB > {BUDGET_MB} MB")
 if abs(t_alert - c_alert) > 1e-5 or abs(t_block - c_block) > 1e-5:
-    problems.append("val thresholds compare.json se alag - model alag bana (seed/rows?)")
+    problems.append("val thresholds differ from compare.json - a different model was built (seed/rows?)")
 if not t_alert <= t_block:
-    problems.append("alert threshold block se upar")
+    problems.append("alert threshold is above block")
 if not (max_diff < 1e-5 and mismatch <= ties):
-    problems.append("ONNX aur sklearn alag jawab")
+    problems.append("ONNX and sklearn give different answers")
 if problems:
     print("\nSELF-CHECK FAIL: " + "; ".join(problems))
     sys.exit(1)
-print("\nSELF-CHECK PASS: budget ke andar, thresholds val pe (compare.json se match), test EK baar, ONNX = sklearn")
+print("\nSELF-CHECK PASS: within budget, thresholds on val (match compare.json), test used ONCE, ONNX = sklearn")

@@ -11,8 +11,8 @@ if (missing.length) {
   process.exit(1);
 }
 
-// P5-f1: model EK BAAR yahan, listen() se pehle. Kabhi throw nahi karta - fail ho to
-// /status "model: unavailable" dikhata hai aur API baaki kaam karti rehti hai.
+// Load the model ONCE, here, before listen(). It never throws - if it fails, /status
+// shows "model: unavailable" and the rest of the API keeps working.
 await loadModel();
 
 // Fail fast: if Redis is down at boot, /ingest can only 500. Better to not start.

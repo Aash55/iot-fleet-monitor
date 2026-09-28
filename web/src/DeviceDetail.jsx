@@ -1,5 +1,5 @@
-// P8-c mein LOGIC nahi badla (dono query 5 s poll, retry false, 404/400 = not found,
-// 401 -> logout, mode ka jawab cache mein cancelQueries ke baad). Sirf dikhawat.
+// Behaviour: both queries poll every 5 s with retry off, 404/400 = not found, 401 -> log out,
+// and the mode-change response is written to the cache after cancelQueries.
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -14,17 +14,17 @@ import Spinner from './Spinner.jsx'
 import { formatDateTime, lastWindow, toChartData } from './chartData.js'
 
 const POLL_MS = 5000
-const READINGS_LIMIT = 60 // simulator har 5 s bhejta hai -> 60 readings = ~5 minute
+const READINGS_LIMIT = 60 // the simulator sends every 5 s -> 60 readings = ~5 minutes
 const DEFAULT_METRIC = 'rate'
 const WINDOW_MS = 10 * 60 * 1000
 const FOCUS = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600'
 
-// 404 = device nahi hai ya tumhara nahi (P3.1). 400 = id number hi nahi (/devices/abc).
+// 404 = device does not exist or is not yours. 400 = id is not a number (/devices/abc).
 function isNotFound(err) {
   return err?.status === 404 || err?.status === 400
 }
 
-// "← Back to devices". Phone pe min-h-11 (44px): ungli se dabane layak oonchaai.
+// "← Back to devices". min-h-11 (44px) on phones: tall enough to tap with a finger.
 function BackLink() {
   return (
     <Link
@@ -37,7 +37,7 @@ function BackLink() {
   )
 }
 
-// Chart ki jagah jitna hi dabba (220 / 300px), taaki data aane pe page upar-neeche na kude.
+// A box the same size as the chart (220 / 300px), so the page does not jump when data arrives.
 function ChartPlaceholder({ children, busy }) {
   return (
     <div
@@ -54,7 +54,7 @@ export default function DeviceDetail({ token, onAuthError }) {
   const [picked, setPicked] = useState(DEFAULT_METRIC)
   const queryClient = useQueryClient()
 
-  // Dono query P3.2 jaisi: har 5 s poll, retry nahi (polling khud retry hai).
+  // Both queries poll every 5 s with no retry (polling is itself the retry).
   const deviceQuery = useQuery({
     queryKey: ['device', id],
     queryFn: () => getDevice(token, id),
@@ -74,9 +74,10 @@ export default function DeviceDetail({ token, onAuthError }) {
     if (authFailed) onAuthError()
   }, [authFailed, onAuthError])
 
-  // P7-f4b: PATCH ka jawab (naya device) seedha cache mein. Pehle chalu poll roko - warna jo
-  // GET PATCH se pehle nikla tha wo purana mode laa ke naya mita deta (DevicesList jaisa).
-  // List ka cache bhi - wapas jaane pe list mein purana mode na dikhe.
+  // Write the PATCH response (the updated device) straight into the cache. Cancel the running
+  // poll first, otherwise a GET sent before the PATCH would return the old mode and overwrite
+  // the new one (same as DevicesList). Update the list cache too, so going back to the list
+  // does not show the old mode.
   async function handleModeChanged(updated) {
     await queryClient.cancelQueries({ queryKey: ['device', id] })
     queryClient.setQueryData(['device', id], updated)
@@ -85,7 +86,7 @@ export default function DeviceDetail({ token, onAuthError }) {
     )
   }
 
-  if (authFailed) return null // logout ho raha hai; RequireAuth /login bhej dega
+  if (authFailed) return null // logging out; RequireAuth will redirect to /login
 
   if (isNotFound(deviceQuery.error)) {
     return (
@@ -122,7 +123,7 @@ export default function DeviceDetail({ token, onAuthError }) {
       <BackLink />
 
       {device && (
-        // Phone: naam, meta, phir chips neeche. 640px+: naam/meta baayein, chips daayein.
+        // Phone: name, meta, then chips below. 640px+: name/meta on the left, chips on the right.
         <div className="-mt-2 flex flex-col gap-2.5 sm:mt-0 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-4">
           <div className="flex min-w-0 flex-col gap-0.5 sm:gap-1">
             <h1 className="text-xl font-semibold tracking-tight wrap-anywhere sm:text-2xl">{device.name}</h1>
@@ -155,11 +156,11 @@ export default function DeviceDetail({ token, onAuthError }) {
 
       <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:gap-4 sm:p-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4">
-          {/* P3.4 step 2: readings na hon to metric ka koi naam hi nahi -> khaali dropdown mat dikhao */}
+          {/* With no readings there are no metric names, so do not show an empty dropdown */}
           {names.length > 0 && (
             <label className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2.5">
               <span className="text-sm font-semibold">Metric</span>
-              {/* font-mono: metric ke naam code jaise (syn_count) - design. Phone pe text-base (iOS zoom nahi). */}
+              {/* font-mono: metric names are code-like (syn_count). text-base on phones (no iOS zoom). */}
               <select
                 value={metric}
                 onChange={(event) => setPicked(event.target.value)}
@@ -194,7 +195,7 @@ export default function DeviceDetail({ token, onAuthError }) {
         ) : (
           <>
             <ReadingsChart data={toChartData(shown, metric)} metric={metric} />
-            {/* Legend: har nishaan ka matlab, wahi rang jo chart pe. Phone pe ek ke neeche ek. */}
+            {/* Legend: what each mark means, in the chart's colours. Stacked on phones. */}
             <div className="flex flex-col gap-1 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-600 sm:flex-row sm:flex-wrap sm:gap-x-4">
               <span>
                 Last {shown.length} readings, {formatDateTime(shown[0].ts)} to{' '}

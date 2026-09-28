@@ -1,19 +1,19 @@
-// Pehle ye sab App.jsx ke andar ek kaala header tha. Ab safed bar, aur health ka rang
-// uske matlab se (health.js). Desktop (sm = 640px+) pe health bar ke andar; phone pe bar
-// mein jagah nahi, to health bar ke NEECHE alag patti mein.
+// This used to be a black header inside App.jsx. Now it is a white bar, and the health colour
+// follows its meaning (health.js). On desktop (sm = 640px+) health sits inside the bar; on
+// phones there is no room in the bar, so health gets its own strip BELOW it.
 import { Link } from 'react-router'
 import { healthTone } from './health.js'
 
 const FOCUS = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600'
 
-// Dot ka rang tone se. checking = khaali gola (abhi pata nahi), baaki bhare hue.
+// Dot colour comes from the tone. checking = hollow circle (not known yet), the rest filled.
 const DOT = {
   ok: 'size-2 rounded-full bg-slate-400',
   checking: 'size-2 rounded-full border-[1.5px] border-slate-400',
   warn: 'size-2 rounded-full bg-amber-500',
 }
 
-// Desktop: warn ho to amber "pill" (goli jaisa dabba), warna sirf dot + text.
+// Desktop: on warn, an amber "pill" (rounded box); otherwise just dot + text.
 const DESKTOP = {
   ok: 'text-slate-600',
   checking: 'text-slate-500',
@@ -36,7 +36,7 @@ export default function TopBar({ apiStatus, onLogout }) {
     <>
       <header className="flex h-14 items-center justify-between border-b border-slate-200 bg-white px-4 sm:px-6">
         <Link to="/devices" className={`flex items-center gap-2.5 rounded-md ${FOCUS}`}>
-          {/* Logo: kaala chokor, andar safed khaali chokor. Sirf sajawat -> aria-hidden. */}
+          {/* Logo: black square with a hollow white square inside. Decorative only -> aria-hidden. */}
           <span aria-hidden="true" className="grid size-7 place-items-center rounded-lg bg-slate-900">
             <span className="size-2.5 rounded-[3px] border-2 border-white" />
           </span>
@@ -62,7 +62,7 @@ export default function TopBar({ apiStatus, onLogout }) {
         </div>
       </header>
 
-      {/* Phone ki health patti. sm:hidden = 640px+ pe gayab (upar wala dikhta hai). */}
+      {/* Phone health strip. sm:hidden = hidden at 640px+ (the one in the bar shows instead). */}
       <div
         className={`flex h-9 items-center border-b px-4 sm:hidden ${
           tone === 'warn' ? 'border-amber-300 bg-amber-50' : 'border-slate-200 bg-white'

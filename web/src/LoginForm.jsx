@@ -1,10 +1,10 @@
-// P8-d mein LOGIC nahi badla: galat password pe password khaali, network error ka alag text,
-// busy mein button band. Sirf dikhawat + shabd "Sign in" -> "Log in" (design).
+// Behaviour: a wrong password clears the password field, network errors get their own message,
+// and the button is disabled while busy. The UI wording is "Log in" (not "Sign in").
 import { useState } from 'react'
 import { login } from './api.js'
 
 const FOCUS = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600'
-// Phone: 44px ooncha + text-base (16px, iOS zoom nahi). 640px+: 40px + text-sm.
+// Phone: 44px tall + text-base (16px, avoids iOS zoom). 640px+: 40px + text-sm.
 const INPUT = `h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-base text-slate-900 sm:h-10 sm:text-sm ${FOCUS}`
 
 export default function LoginForm({ onSuccess }) {
@@ -42,8 +42,8 @@ export default function LoginForm({ onSuccess }) {
         <p className="text-sm text-slate-600">Fleet Monitor console</p>
       </div>
 
-      {/* Error form ke UPAR, fields se pehle: pehle galti dikhe, phir theek karne ki jagah.
-          Amber, laal nahi (laal = attack). */}
+      {/* Error goes at the TOP of the form, before the fields: first show what went wrong,
+          then where to fix it. Amber, not red (red = attack). */}
       {error && (
         <div role="alert" className="flex items-start gap-2.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm text-amber-900">
           <span

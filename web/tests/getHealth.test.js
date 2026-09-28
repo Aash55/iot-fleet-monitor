@@ -4,7 +4,7 @@ import http from 'node:http'
 import { fileURLToPath } from 'node:url'
 import { createServer } from 'vite'
 
-// Nakli API: har path ka jawab yahan se aata hai. Test badal-badal ke jawab set karta hai.
+// Fake API: every path is answered from here. Each test sets the reply it needs.
 let reply = { status: 200, type: 'application/json; charset=utf-8', body: '{}' }
 let lastPath = null
 
@@ -19,10 +19,10 @@ let getHealth
 
 before(async () => {
   await new Promise((resolve) => fake.listen(0, '127.0.0.1', resolve))
-  // Vite ko pehle se set env milti hai to wo .env.development se upar rehti hai.
+  // An env var already set when Vite starts takes precedence over .env.development.
   process.env.VITE_API_URL = `http://127.0.0.1:${fake.address().port}`
 
-  // Vite hi api.js ko load kare, taaki import.meta.env.VITE_API_URL asli jaisa bhare.
+  // Let Vite load api.js, so import.meta.env.VITE_API_URL is filled in as in the real app.
   vite = await createServer({
     root: fileURLToPath(new URL('..', import.meta.url)),
     configFile: false,
@@ -38,38 +38,38 @@ after(async () => {
   fake.close()
 })
 
-test('T1 asli API jaisa JSON {status:"ok"} (Express header) -> "API ok, database ok"', async () => {
+test('T1 JSON {status:"ok"} like the real API (Express header) -> "API ok, database ok"', async () => {
   reply = {
     status: 200,
     type: 'application/json; charset=utf-8',
     body: JSON.stringify({ status: 'ok', db: 'up', redis: 'up' }),
   }
   assert.equal(await getHealth(), 'API ok, database ok')
-  assert.equal(lastPath, '/status') // sahi URL pe gaya, /health pe nahi
+  assert.equal(lastPath, '/status') // hit the correct URL, not /health
 })
 
-test('T2 HTML page 200 (jaise Vercel ka index.html) -> "API error..." , "ok" nahi', async () => {
+test('T2 HTML page 200 (like the Vercel index.html) -> "API error...", not "ok"', async () => {
   reply = { status: 200, type: 'text/html; charset=utf-8', body: '<!doctype html><html><body>app</body></html>' }
   const msg = await getHealth()
   assert.notEqual(msg, 'API ok, database ok')
   assert.match(msg, /^API error/)
 })
 
-test('T3 JSON 200 lekin status "ok" nahi (koi aur JSON service) -> "API error..."', async () => {
+test('T3 JSON 200 but status is not "ok" (some other JSON service) -> "API error..."', async () => {
   reply = { status: 200, type: 'application/json', body: JSON.stringify({ hello: 'world' }) }
   const msg = await getHealth()
   assert.notEqual(msg, 'API ok, database ok')
   assert.match(msg, /^API error/)
 })
 
-test('T4 header JSON bolta hai par body tooti hai -> "API error...", throw NAHI', async () => {
+test('T4 header says JSON but the body is broken -> "API error...", does NOT throw', async () => {
   reply = { status: 200, type: 'application/json', body: 'not json{' }
-  const msg = await getHealth() // throw hua to test yahin fail
+  const msg = await getHealth() // if it throws, the test fails here
   assert.notEqual(msg, 'API ok, database ok')
   assert.match(msg, /^API error/)
 })
 
-test('T5 503 degraded -> "ok" kabhi nahi', async () => {
+test('T5 503 degraded -> never "ok"', async () => {
   reply = {
     status: 503,
     type: 'application/json; charset=utf-8',

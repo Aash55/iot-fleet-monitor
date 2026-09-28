@@ -8,46 +8,47 @@ export const devicesRouter = Router();
 const deviceInput = z.object({ name: z.string().trim().min(1).max(100) });
 const idParam = z.coerce.number().int().positive();
 
-// P7-f1: PATCH /devices/:id ka body. Sirf ye 2 shabd - baaki sab 400.
-// DB ka CHECK (devices_mode_check) bhi yahi rokta hai; zod pehle rokta hai taaki user ko
-// saaf 400 mile, 500 nahi. Body mein aur kuch (jaise name) aaye to zod use chupchaap hata deta hai.
+// Body of PATCH /devices/:id. Only these 2 words - anything else is a 400.
+// The DB's CHECK (devices_mode_check) rejects the same thing; zod catches it first so the
+// user gets a clean 400, not a 500. Any other body field (e.g. name) is silently stripped by zod.
 const modeInput = z.object({ mode: z.enum(["detect", "prevent"]) });
 
-// ?limit=N. Query string mein sab TEXT aata hai ("50"), isliye coerce.
-// Khaali ?limit= -> Number("") = 0 -> min(1) pakad leta hai. Na bheja -> 100.
+// ?limit=N. Everything in a query string arrives as TEXT ("50"), hence coerce.
+// Empty ?limit= -> Number("") = 0 -> caught by min(1). Not sent -> 100.
 const readingsQuery = z.object({
   limit: z.coerce.number().int().min(1).max(500).default(100),
 });
 
-// P3.1: status ab STORE nahi hota. Har request pe last_seen se NIKALTA hai, isliye
-// kabhi purana (stale) nahi ho sakta. last_seen NULL (kabhi data nahi aaya) ->
-// comparison NULL -> ELSE -> 'offline'.
+// Status is NOT stored. It is DERIVED from last_seen on every request, so it can
+// never be stale. last_seen NULL (no data ever arrived) -> comparison is NULL ->
+// ELSE -> 'offline'.
 const STATUS_SQL = `CASE WHEN last_seen > now() - interval '2 minutes'
        THEN 'online' ELSE 'offline' END AS status`;
 
-// P5-f3: "alert" = pichhle 15 min mein model ne kitni readings ko attack kaha. Alag alerts
-// table NAHI (acknowledge/resolve jaisa state MVP mein nahi) - readings se hi ginti.
-// received_at (API ki ghadi), ts (device ki ghadi) NAHI: device ka clock galat ya jhootha ho
-// sakta hai; last_seen bhi received_at se hi banta hai. NULL score (unscored) attack nahi ginta.
-// Subquery ka `devices.id` bahar wali devices row hai - isliye har query mein FROM devices.
+// "alert" = how many readings the model called an attack in the last 15 min. No separate
+// alerts table (no acknowledge/resolve state in the MVP) - counted straight from readings.
+// Uses received_at (the API's clock), NOT ts (the device's clock): a device clock can be wrong
+// or spoofed; last_seen is also built from received_at. A NULL score (unscored) is not an attack.
+// `devices.id` in the subquery is the outer devices row - so every query must use FROM devices.
 const ALERT_WINDOW = "15 minutes";
 const RECENT_ATTACKS_SQL = `(SELECT count(*)::int FROM readings r
        WHERE r.device_id = devices.id AND r.is_attack
          AND r.received_at > now() - interval '${ALERT_WINDOW}') AS recent_attacks`;
 
-// P7-f4a: "N blocked · 15 min" badge. recent_attacks jaisa hi: same 15 min, same received_at.
-// Do alag ginti kyun: recent_attacks = model ne attack KAHA (detect + prevent dono);
-// recent_blocked = gateway ko ROKNE ko kaha (sirf prevent). alert aur block threshold ke beech wali reading pehle mein
-// aati hai, doosre mein nahi. action NULL (detect / purani rows) -> 'blocked' nahi -> nahi ginta.
+// The "N blocked · 15 min" badge. Same as recent_attacks: same 15 min, same received_at.
+// Why two separate counts: recent_attacks = the model CALLED it an attack (detect + prevent);
+// recent_blocked = the gateway was told to BLOCK it (prevent only). A reading between the
+// alert and block thresholds counts in the first but not the second. action NULL (detect /
+// older rows) -> not 'blocked' -> not counted.
 const RECENT_BLOCKED_SQL = `(SELECT count(*)::int FROM readings r
        WHERE r.device_id = devices.id AND r.action = 'blocked'
          AND r.received_at > now() - interval '${ALERT_WINDOW}') AS recent_blocked`;
 
-// P7-f1: mode bhi har jagah (list, ek device, POST, PATCH) - web ka toggle (f4b) isi se chalega.
+// mode is returned everywhere (list, single device, POST, PATCH) - the web toggle relies on it.
 const PUBLIC_COLUMNS = `id, name, mode, ${STATUS_SQL}, last_seen, created_at, ${RECENT_ATTACKS_SQL}, ${RECENT_BLOCKED_SQL}`;
 
-// Naam ki uniqueness DB ka constraint enforce karta hai, code nahi.
-// Ye naam schema.sql aur migration dono mein same hai.
+// Name uniqueness is enforced by a DB constraint, not by code.
+// This constraint name is the same in schema.sql and in the migration.
 const NAME_CONSTRAINT = "devices_owner_id_name_key";
 
 devicesRouter.post("/", async (req, res, next) => {
@@ -68,8 +69,8 @@ devicesRouter.post("/", async (req, res, next) => {
     // api_key is shown exactly once; only its hash is stored
     res.status(201).json({ device: rows[0], api_key: apiKey });
   } catch (err) {
-    // 23505 = unique_violation. Constraint ka naam bhi check karo: api_key_hash bhi
-    // UNIQUE hai - wahan takraav "naam le liya" nahi, asli server error (500) hai.
+    // 23505 = unique_violation. Check the constraint name too: api_key_hash is also
+    // UNIQUE - a clash there is not "name taken", it is a real server error (500).
     if (err.code === "23505" && err.constraint === NAME_CONSTRAINT) {
       return res
         .status(409)
@@ -112,24 +113,24 @@ devicesRouter.get("/:id", async (req, res, next) => {
   }
 });
 
-// P7-f1: device ka mode badlo (detect <-> prevent). PATCH = record ka EK hissa badalna
-// (PUT = poora record badalna). Sirf apna device: WHERE owner_id. Doosre ka device = 404,
-// 403 nahi - "ye device hai" itna bhi pata na chale (GET /:id jaisa hi).
+// Change a device's mode (detect <-> prevent). PATCH = change ONE part of a record
+// (PUT = replace the whole record). Own devices only: WHERE owner_id. Someone else's device =
+// 404, not 403 - don't even reveal that the device exists (same as GET /:id).
 devicesRouter.patch("/:id", async (req, res, next) => {
   const id = idParam.safeParse(req.params.id);
   if (!id.success) {
     return res.status(400).json({ error: "id must be a positive integer" });
   }
-  // Body hi na ho (Content-Type JSON nahi) to Express 5 mein req.body = undefined ->
-  // zod fail -> 400. Isliye alag check nahi chahiye.
+  // With no body (Content-Type not JSON), Express 5 sets req.body = undefined ->
+  // zod fails -> 400. So no separate check is needed.
   const parsed = modeInput.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: { mode: ['mode must be "detect" or "prevent"'] } });
   }
 
   try {
-    // Ek hi query: badlo AUR naya device wapas lo. Pehle SELECT phir UPDATE = 2 chakkar,
-    // aur beech mein koi aur badal de to jawab purana. RETURNING naya (badla hua) row deta hai.
+    // One query: update AND get the new device back. SELECT then UPDATE = 2 round trips,
+    // and if someone changes it in between the reply is stale. RETURNING gives the updated row.
     const { rows } = await pool.query(
       `UPDATE devices SET mode = $1
        WHERE id = $2 AND owner_id = $3
@@ -145,7 +146,7 @@ devicesRouter.patch("/:id", async (req, res, next) => {
   }
 });
 
-// P3.1: chart ke liye ek device ki latest N readings.
+// Latest N readings of one device, for the chart.
 devicesRouter.get("/:id/readings", async (req, res, next) => {
   const id = idParam.safeParse(req.params.id);
   if (!id.success) {
@@ -157,9 +158,9 @@ devicesRouter.get("/:id/readings", async (req, res, next) => {
   }
 
   try {
-    // 1) Kya ye device ISI user ka hai? Nahi to 404 (403 nahi) - doosre ka device
-    //    "hai" ye bhi pata na chale. Iske bina "tumhara nahi" aur "tumhara hai par
-    //    abhi reading nahi" dono khaali list dete - farq hi nahi dikhta.
+    // 1) Does this device belong to THIS user? If not, 404 (not 403) - don't even reveal
+    //    that someone else's device exists. Without this check, "not yours" and "yours but
+    //    no readings yet" would both return an empty list - indistinguishable.
     const owned = await pool.query(
       "SELECT 1 FROM devices WHERE id = $1 AND owner_id = $2",
       [id.data, req.user.id]
@@ -168,11 +169,11 @@ devicesRouter.get("/:id/readings", async (req, res, next) => {
       return res.status(404).json({ error: "device not found" });
     }
 
-    // 2) Latest N. Index readings_device_ts_idx (device_id, ts DESC) isi ORDER BY ke
-    //    liye bana hai. owner_id yahan dobara = defence in depth.
+    // 2) Latest N. Index readings_device_ts_idx (device_id, ts DESC) exists for exactly
+    //    this ORDER BY. Repeating owner_id here = defence in depth.
     const { rows } = await pool.query(
-      // P5-f3: score bhi bhejo - chart attack wale points alag rang mein dikhayega (f4).
-      // P7-f4a: action bhi ('allowed' | 'blocked' | null) - chart pe blocked point = ✕ (f4b).
+      // Send the score too - the chart draws attack points in a different colour.
+      // And action ('allowed' | 'blocked' | null) - a blocked point is drawn as ✕ on the chart.
       `SELECT id, ts, metrics, attack_proba, is_attack, action FROM readings
        WHERE device_id = $1 AND owner_id = $2
        ORDER BY ts DESC
@@ -180,10 +181,10 @@ devicesRouter.get("/:id/readings", async (req, res, next) => {
       [id.data, req.user.id, query.data.limit]
     );
 
-    // DB ne naya -> purana diya (LIMIT ke liye zaroori). Chart purana -> naya chalta hai.
+    // The DB returned newest -> oldest (needed for LIMIT). The chart runs oldest -> newest.
     rows.reverse();
-    // ts pg se JS Date aata hai; res.json() usse toISOString() = UTC "...Z" banata hai.
-    // IST mein badalna BROWSER ka kaam hai (P3.3). Yahan +5:30 jodna = bug.
+    // ts comes from pg as a JS Date; res.json() turns it into toISOString() = UTC "...Z".
+    // Converting to IST is the BROWSER's job. Adding +5:30 here = bug.
     res.json({ readings: rows });
   } catch (err) {
     next(err);

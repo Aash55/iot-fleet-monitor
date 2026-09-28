@@ -1,5 +1,5 @@
-// Nakli API (getHealth.test.js jaisa): dekhte hain ki setDeviceMode sahi request bhejta hai
-// aur galti pe ApiError (status ke saath) phenkta hai - ModeToggle 401 pe logout isi se karta hai.
+// Fake API (like getHealth.test.js): checks that setDeviceMode sends the right request and
+// throws an ApiError (with status) on failure. ModeToggle relies on that to log out on 401.
 import { after, before, test } from 'node:test'
 import assert from 'node:assert/strict'
 import http from 'node:http'
@@ -40,7 +40,7 @@ after(async () => {
   fake.close()
 })
 
-test('setDeviceMode: PATCH /devices/:id, body {mode}, token ke saath; naya device lautata hai', async () => {
+test('setDeviceMode: PATCH /devices/:id, body {mode}, with token; returns the updated device', async () => {
   reply = { status: 200, body: JSON.stringify({ device: { id: '22', mode: 'prevent' } }) }
   const device = await api.setDeviceMode('tok', '22', 'prevent')
   assert.deepEqual(device, { id: '22', mode: 'prevent' })
@@ -50,7 +50,7 @@ test('setDeviceMode: PATCH /devices/:id, body {mode}, token ke saath; naya devic
   assert.deepEqual(JSON.parse(last.body), { mode: 'prevent' })
 })
 
-test('setDeviceMode: 404 / 401 pe ApiError, status ke saath', async () => {
+test('setDeviceMode: ApiError with status on 404 / 401', async () => {
   for (const status of [404, 401]) {
     reply = { status, body: '{"error":"x"}' }
     await assert.rejects(api.setDeviceMode('tok', '22', 'detect'), (err) => {

@@ -1,5 +1,5 @@
-// N simulator device banata hai aur unki API key ek gitignored file mein likh deta hai.
-// Chalane ka tareeka (Git Bash, api/ folder se):
+// Creates N simulator devices and writes their API keys to a gitignored file.
+// Usage (Git Bash, from the api/ folder):
 //   npm run provision -- 6                                  -> local API, scripts/fleet.local.json
 //   node --env-file=.env.provision.local scripts/provision.js 3 --fleet fleet.prod.local.json
 import { access, writeFile } from "node:fs/promises";
@@ -18,13 +18,13 @@ try {
       fleet: { type: "string", default: DEFAULT_FLEET },
     },
     allowPositionals: true, // device count: "6"
-    strict: true,           // galat flag -> yahin pakda jaayega
+    strict: true,           // unknown flag -> caught right here
   }));
-  if (positionals.length > 1) throw new Error(`sirf ek number chahiye, mila: ${positionals.join(" ")}`);
+  if (positionals.length > 1) throw new Error(`expected only one number, got: ${positionals.join(" ")}`);
   OUT = fleetPath(values.fleet);
 } catch (err) {
-  console.error(`Flag galat hai: ${err.message}`);
-  console.error("Sahi: npm run provision -- [6] [--fleet fleet.local.json] [--force]");
+  console.error(`Invalid flag: ${err.message}`);
+  console.error("Usage: npm run provision -- [6] [--fleet fleet.local.json] [--force]");
   process.exit(1);
 }
 const COUNT = Number(positionals[0] ?? 6);
@@ -35,24 +35,24 @@ if (!EMAIL || !PASSWORD) {
   process.exit(1);
 }
 if (!Number.isInteger(COUNT) || COUNT < 1 || COUNT > 50) {
-  console.error(`Device count 1-50 hona chahiye, mila: ${positionals[0]}`);
+  console.error(`Device count must be 1-50, got: ${positionals[0]}`);
   process.exit(1);
 }
 
-// GUARD: ye file har run pe OVERWRITE hoti hai. Agar pehle se hai aur tu dobara chala
-// deta hai, to usme rakhi purani keys HAMESHA ke liye chali jaati hain - device DB mein
-// reh jaate hain par unki key kabhi wapas nahi milti (rotation endpoint nahi hai).
+// GUARD: this file is OVERWRITTEN on every run. If it already exists and you run this again,
+// the old keys stored in it are lost FOREVER - the devices stay in the DB but their keys can
+// never be recovered (there is no key rotation endpoint).
 try {
   await access(OUT);
   if (!FORCE) {
-    console.error(`Pehle se maujood: ${OUT}`);
-    console.error("Dobara chalane se usme rakhi API keys HAMESHA ke liye chali jaayengi.");
-    console.error(`Sach mein nayi fleet chahiye? ->  provision ${COUNT} --fleet ${values.fleet} --force`);
+    console.error(`Already exists: ${OUT}`);
+    console.error("Running again would lose the API keys stored in it FOREVER.");
+    console.error(`Really want a new fleet? ->  provision ${COUNT} --fleet ${values.fleet} --force`);
     process.exit(1);
   }
-  console.log(`--force: purani ${values.fleet} overwrite ho jaayegi`);
+  console.log(`--force: the old ${values.fleet} will be overwritten`);
 } catch (err) {
-  if (err.code !== "ENOENT") throw err;   // file nahi hai = normal, baaki error asli hai
+  if (err.code !== "ENOENT") throw err;   // file missing = normal, any other error is real
 }
 
 async function post(pathname, body, token) {
@@ -69,7 +69,7 @@ async function post(pathname, body, token) {
   return JSON.parse(text);
 }
 
-// Target PEHLE dikhao: local ya Render - galat jagah device ban jaaye to pata chale.
+// Show the target FIRST (local or Render), so devices created in the wrong place get noticed.
 console.log(`API: ${BASE}   fleet file: ${OUT}`);
 
 const stamp = new Date().toISOString().slice(0, 19).replace(/[-:T]/g, "");
@@ -81,7 +81,7 @@ const devices = [];
 for (let i = 1; i <= COUNT; i++) {
   const name = `sim-${stamp}-${String(i).padStart(2, "0")}`;
   const { device, api_key } = await post("/devices", { name }, token);
-  // device.id string hi rehta hai: Postgres BIGINT. Number() kabhi mat karna.
+  // device.id stays a string: it is a Postgres BIGINT. Never convert it with Number().
   devices.push({ id: device.id, name: device.name, api_key });
   console.log(`  ${i}/${COUNT}  id=${device.id}  ${device.name}`);
 }
@@ -89,4 +89,4 @@ for (let i = 1; i <= COUNT; i++) {
 const payload = { base_url: BASE, created_at: new Date().toISOString(), devices };
 await writeFile(OUT, JSON.stringify(payload, null, 2) + "\n", { mode: 0o600 });
 console.log(`Wrote ${devices.length} device keys -> ${OUT}`);
-console.log("Ye file gitignored hai. Repo PUBLIC hai - kabhi commit mat karna.");
+console.log("This file is gitignored. The repo is PUBLIC - never commit it.");

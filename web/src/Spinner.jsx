@@ -1,5 +1,5 @@
-// "Saving..." (mode toggle) aur "Loading readings..." dono mein. Ek gol border, upar wala
-// hissa gehra, animate-spin (Tailwind) use ghumaata hai. aria-hidden: saath ka text hi kaafi.
+// Used in "Saving..." (mode toggle) and "Loading readings...". A round border with a darker top
+// segment, rotated by animate-spin (Tailwind). aria-hidden: the text next to it is enough.
 export default function Spinner() {
   return (
     <span

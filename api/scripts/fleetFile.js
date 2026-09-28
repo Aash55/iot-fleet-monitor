@@ -1,16 +1,16 @@
-// Fleet file mein device API keys hoti hain. Repo PUBLIC hai.
-// Isliye sirf scripts/ ke andar ka naam, aur naam `.local.json` pe khatam hona chahiye
-// (root .gitignore ki line `*.local.json` usi ko chhupati hai).
+// The fleet file holds device API keys, and the repo is PUBLIC.
+// So only a bare file name inside scripts/ is allowed, and it must end in `.local.json`
+// (the root .gitignore line `*.local.json` is what hides it).
 import path from "node:path";
 
 export const DEFAULT_FLEET = "fleet.local.json";
 
 export function fleetPath(name = DEFAULT_FLEET) {
-  const onlyName = name === path.basename(name);          // "../x" ya "C:\x" jaisa path nahi
-  const gitignored = /^[\w.-]+\.local\.json$/.test(name); // jaise fleet.prod.local.json
+  const onlyName = name === path.basename(name);          // no paths like "../x" or "C:\x"
+  const gitignored = /^[\w.-]+\.local\.json$/.test(name); // e.g. fleet.prod.local.json
   if (!onlyName || !gitignored) {
     throw new Error(
-      `--fleet mein sirf file ka naam do, jo .local.json pe khatam ho (jaise fleet.prod.local.json). Mila: ${name}`
+      `--fleet takes only a file name ending in .local.json (e.g. fleet.prod.local.json). Got: ${name}`
     );
   }
   return path.join(import.meta.dirname, name);

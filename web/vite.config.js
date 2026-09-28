@@ -2,10 +2,10 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { defineConfig, loadEnv } from 'vite'
 
-// VITE_API_URL build ke waqt JS mein "bake" hota hai (baad mein badalta nahi).
-// Na mile to Vite chup-chaap `undefined` daal deta hai -> fetch("undefined/health")
-// -> Vercel ka SPA rewrite index.html (200) lauta deta -> header "API ok" jhooth bolta.
-// Isliye galat value pe BUILD HI FAIL karo. Failed deploy != down (P6.2).
+// VITE_API_URL is baked into the JS at build time (it cannot change later).
+// If it is missing, Vite silently inserts `undefined` -> fetch("undefined/health")
+// -> Vercel's SPA rewrite returns index.html (200) -> the header falsely says "API ok".
+// So a bad value FAILS THE BUILD. A failed deploy is not the same as a site that is down.
 function apiUrlProblem(value) {
   if (!value) return 'VITE_API_URL is missing'
   let url
@@ -24,7 +24,7 @@ function apiUrlProblem(value) {
 
 export default defineConfig(({ command, mode }) => {
   if (command === 'build') {
-    // loadEnv: .env.production files + asli environment (Vercel ka var yahin aata hai)
+    // loadEnv: .env.production files + the real environment (where Vercel's variable comes from)
     const env = loadEnv(mode, process.cwd(), 'VITE_')
     const problem = apiUrlProblem(env.VITE_API_URL)
     if (problem) {

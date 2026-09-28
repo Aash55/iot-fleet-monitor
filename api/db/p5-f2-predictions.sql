@@ -1,12 +1,12 @@
--- PURANE database pe chalao (local fleet + Neon), pgAdmin Query Tool se, CODE PUSH SE PEHLE.
--- Naya consumer in columns mein likhta hai. Column na ho to INSERT 42703 deta hai -> consumer
--- use "transient" maan ke hamesha retry karta hai -> readings atki rehti hain.
--- IF NOT EXISTS: dobara chalana safe hai. NULL default: purani rows ko chhoona nahi padta,
--- isliye bade table pe bhi ye turant hota hai (table rewrite nahi hoti).
+-- Run on EXISTING databases (local fleet + Neon) via the pgAdmin Query Tool, BEFORE PUSHING CODE.
+-- The new consumer writes these columns. If a column is missing, INSERT fails with 42703 -> the
+-- consumer treats it as "transient" and retries forever -> readings stay stuck.
+-- IF NOT EXISTS: safe to re-run. NULL default: existing rows are not touched, so this is
+-- instant even on a big table (no table rewrite).
 ALTER TABLE readings ADD COLUMN IF NOT EXISTS attack_proba REAL;
 ALTER TABLE readings ADD COLUMN IF NOT EXISTS is_attack BOOLEAN;
 
--- Check: dono naye column dikhne chahiye (2 rows)
+-- Check: both new columns should show up (2 rows)
 SELECT column_name, data_type
 FROM information_schema.columns
 WHERE table_name = 'readings' AND column_name IN ('attack_proba', 'is_attack')

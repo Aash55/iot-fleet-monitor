@@ -5,10 +5,11 @@ import { predict, modelStatus, blockThreshold } from "../model.js";
 
 export const ingestRouter = Router();
 
-// P9-c2: block threshold ab model.json se (train.py ne VALIDATION pe chuna: benign pe FPR <= 0.1%).
-// Pehle 0.9 hardcode tha, jo TEST set pe chuna gaya tha (P7) - wo leakage thi. Alert threshold
-// (FPR <= 0.5%) aur block ke beech = model "attack" kehta hai (is_attack, dashboard pe alert), par
-// block NAHI: galat block = sahi device ka data kho gaya, isliye block ki limit zyada sakht.
+// The block threshold now comes from model.json (train.py picked it on VALIDATION data: FPR on
+// benign <= 0.1%). It used to be a hardcoded 0.9 chosen on the TEST set - that was leakage.
+// Between the alert threshold (FPR <= 0.5%) and block = the model says "attack" (is_attack, alert
+// on the dashboard), but NO block: a wrong block loses a healthy device's data, so the block bar
+// is stricter.
 
 const readingInput = z.object({
   // Device clock, ISO-8601. Optional: if the device does not send one we stamp it.
@@ -21,11 +22,11 @@ const readingInput = z.object({
 
 let warnedFailOpen = false;
 
-// P7-f2: prevent mode ka faisla. API = decision point (PDP): sirf BATATI hai "allow" ya "block".
-// Asli rokna gateway/simulator (PEP) karta hai - wo f3 mein. Kabhi throw nahi karta.
+// The prevent-mode decision. The API is the decision point (PDP): it only SAYS "allow" or "block".
+// The actual blocking is done by the gateway/simulator (PEP). Never throws.
 async function decide(metrics) {
   const t0 = performance.now();
-  const [pred] = await predict([metrics]); // 1 row, request ke andar hi (sync faisla)
+  const [pred] = await predict([metrics]); // 1 row, inside the request (synchronous decision)
   const ms = performance.now() - t0;
 
   if (pred) {
@@ -37,19 +38,19 @@ async function decide(metrics) {
     };
   }
 
-  // Score nahi mila. Do alag wajah, do alag faisle:
+  // No score. Two different causes, two different decisions:
   if (modelStatus() !== "loaded") {
-    // 1) Model hi nahi hai = HAMARI galti. FAIL-OPEN: allow. IoT telemetry ka ruk jaana
-    //    (availability) zyada bura hai. Ulta (fail-closed) README mein trade-off ke saath.
+    // 1) No model at all = OUR fault. FAIL-OPEN: allow. Stopping IoT telemetry (losing
+    //    availability) is worse. The opposite (fail-closed) is in the README with the trade-off.
     if (!warnedFailOpen) {
       console.error("IPS fail-open: model unavailable - prevent mode devices allowed without score");
       warnedFailOpen = true;
     }
     return { action: "allow", reason: "model_unavailable", pred: null, ms };
   }
-  // 2) Model hai, par reading mein koi feature gayab / number nahi = DEVICE ki taraf se.
-  //    Yahan allow karte to attacker ek feature hata ke har baar bach nikalta (evasion).
-  //    Isliye BLOCK. (Detect mode mein aisi reading pehle jaisi bina score store hoti hai.)
+  // 2) The model is there, but the reading has a missing / non-numeric feature = the DEVICE's
+  //    side. Allowing it would let an attacker escape every time by dropping one feature
+  //    (evasion). So BLOCK. (In detect mode such a reading is still stored without a score.)
   return { action: "block", reason: "missing_features", pred: null, ms };
 }
 
@@ -68,9 +69,9 @@ ingestRouter.post("/", async (req, res, next) => {
     metrics: JSON.stringify(parsed.data.metrics),
   };
 
-  // Detect mode (IDS) = bilkul pehle jaisa: yahan score NAHI, consumer baad mein lagata hai.
-  // Isliye detect mode ki latency nahi badhti. Jawab mein action "allow" - gateway ke liye
-  // ek hi shape: har jawab mein action hota hai.
+  // Detect mode (IDS): NO scoring here, the consumer adds the score later. So detect-mode
+  // latency does not grow. The reply still has action "allow" - one shape for the gateway:
+  // every reply carries an action.
   const body = { accepted: true, mode: req.device.mode, action: "allow" };
 
   if (req.device.mode === "prevent") {
@@ -78,27 +79,28 @@ ingestRouter.post("/", async (req, res, next) => {
     body.action = d.action;
     body.reason = d.reason;
     body.attack_proba = d.pred?.attack_proba ?? null;
-    // Postman -> Headers tab mein dikhta hai: predict ne kitne ms liye.
+    // Shows in Postman's Headers tab: how many ms predict took.
     res.set("Server-Timing", `predict;dur=${d.ms.toFixed(2)}`);
 
-    // Score + faisla stream mein bhi -> consumer DOBARA score nahi karta (same model, same
-    // input = same number; dobara = sirf CPU barbaad). Stream fields sirf string hote hain.
+    // Score + decision go into the stream too -> the consumer does NOT score again (same model,
+    // same input = same number; redoing it only wastes CPU). Stream fields are strings only.
     if (d.pred) {
       entry.attack_proba = String(d.pred.attack_proba);
       entry.is_attack = String(d.pred.is_attack);
     }
-    // DB mein past tense: 'blocked'/'allowed' = "ye hua tha". Jawab mein "block" = hukm.
+    // Past tense in the DB: 'blocked'/'allowed' = "this happened". "block" in the reply = a command.
     entry.action = d.action === "block" ? "blocked" : "allowed";
   }
 
   try {
-    // Blocked reading bhi STORE hoti hai (audit): baad mein dikhana padega ki kya roka aur kyun.
-    // "Rokna" matlab gateway use aage (asli system tak) nahi bhejta - hamare DB se chhupana nahi.
+    // Blocked readings are STORED too (audit): later we must be able to show what was blocked
+    // and why. "Block" means the gateway does not forward it (to the real system) - not hiding
+    // it from our DB.
     const streamId = await redis.xAdd(TELEMETRY_STREAM, "*", entry, {
       TRIM: { strategy: "MAXLEN", strategyModifier: "~", threshold: STREAM_MAXLEN },
     });
-    // 202 block pe bhi: request sahi thi aur record ho gayi. Block = body ka `action`, HTTP
-    // error nahi. (4xx dete to simulator/gateway use "request fail" samajhta.)
+    // 202 even on block: the request was valid and got recorded. Block = the body's `action`,
+    // not an HTTP error. (A 4xx would make the simulator/gateway treat it as a failed request.)
     res.status(202).json({ ...body, stream_id: streamId });
   } catch (err) {
     next(err);

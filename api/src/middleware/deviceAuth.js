@@ -9,8 +9,8 @@ export async function requireDevice(req, res, next) {
 
   try {
     const { rows } = await pool.query(
-      // P7-f2: mode bhi - /ingest isi se tay karta hai ki wahin score + faisla karna hai ya nahi.
-      // Isi ek query mein, alag query nahi: har reading pe ek aur DB chakkar bachta hai.
+      // mode too - /ingest uses it to decide whether to score + decide right there.
+      // In this same query, not a separate one: saves an extra DB round trip per reading.
       "SELECT id, owner_id, name, mode FROM devices WHERE api_key_hash = $1",
       [hashApiKey(apiKey)]
     );

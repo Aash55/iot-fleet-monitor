@@ -1,16 +1,16 @@
-// Top bar ka health text (getHealth ka jawab) -> kaunsa rang dikhana hai.
-// Alag .js file kyun: pure function hai, `node --test` se bina browser ke test ho jaata hai
-// (chartData.js jaisa). Component file (.jsx) se sirf component export hone chahiye.
+// Maps the top bar's health text (the result of getHealth) to the colour to show.
+// Why a separate .js file: it is a pure function, testable with `node --test` without a browser
+// (like chartData.js). A component file (.jsx) should export only components.
 
 export const HEALTH_CHECKING = 'Checking API...'
-// Ye text api.js ke getHealth() se AKSHAR-SHA-AKSHAR milna chahiye. Dono jagah test isi
-// string ko pakad ke rakhte hain (getHealth T1 + health.test.js), to ek badla to test tootega.
+// This text must match api.js getHealth() EXACTLY, character for character. Tests pin this
+// string in both places (getHealth T1 + health.test.js), so changing one breaks a test.
 export const HEALTH_OK = 'API ok, database ok'
 
-// 'ok'       -> slate (grey) dot. Hara NAHI: hara = device online, uska matlab alag hai.
-// 'checking' -> khaali (hollow) dot, abhi jawab nahi aaya.
-// 'warn'     -> amber. Database down, HTTP error, API unreachable - sab "dhyan do".
-//               Laal NAHI: laal sirf attack ke liye hai.
+// 'ok'       -> slate (grey) dot. NOT green: green = device online, which means something else.
+// 'checking' -> hollow dot, no answer yet.
+// 'warn'     -> amber. Database down, HTTP error, API unreachable: all mean "pay attention".
+//               NOT red: red is only for attacks.
 export function healthTone(status) {
   if (status === HEALTH_OK) return 'ok'
   if (status === HEALTH_CHECKING) return 'checking'

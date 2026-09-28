@@ -1,5 +1,5 @@
-// Pehle errors laal (bg-red-50) the. Par laal = attack. API down hona attack nahi hai,
-// isliye design ne errors ko amber kiya. Ek hi component: list, device page, login sab yahi use karein.
+// Errors used to be red (bg-red-50), but red means attack. The API being down is not an attack,
+// so errors are amber. One shared component for the list, the device page, login, etc.
 export default function Notice({ children }) {
   return (
     <div role="alert" className="flex items-start gap-2.5 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">

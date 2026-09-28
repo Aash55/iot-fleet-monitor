@@ -1,4 +1,3 @@
-// web/src/auth.js  -> ye f-step P9-e pe badli (P9-e: shouldLogout - sirf 401 pe logout)
 const TOKEN_KEY = 'fleet_token'
 
 export function readToken() {
@@ -25,9 +24,10 @@ export function clearToken() {
   }
 }
 
-// P9-e: /me fail hone pe logout SIRF tab jab API ne token thukraya (401). Network error / 5xx
-// (Render so raha, Neon jaag raha, deploy chal raha) = token galat nahi, API abhi jawab nahi de
-// pa rahi. Us pe logout karna = har cold start pe user ko bahar phenk dena.
+// When /me fails, log out ONLY if the API rejected the token (401). A network error / 5xx
+// (Render asleep, Neon waking up, a deploy in progress) does not mean the token is bad, only
+// that the API cannot answer right now. Logging out on those would kick the user out on every
+// cold start.
 export function shouldLogout(err) {
   return err?.status === 401
 }

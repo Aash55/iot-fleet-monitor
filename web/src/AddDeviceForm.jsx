@@ -31,9 +31,9 @@ export default function AddDeviceForm({ token, onCreated, onAuthError }) {
     }
   }
 
-  // Phone: sab ek ke neeche ek (flex-col), button poori chaudai. 640px+: input aur button
-  // ek line mein (sm:flex-row). items-start + button pe sm:mt-[26px]: label (20px) + gap (6px)
-  // = 26px, to button input ki line pe baithta hai, aur error aane pe bhi upar hi rehta hai.
+  // Phone: everything stacked (flex-col), button full width. 640px+: input and button on one
+  // line (sm:flex-row). items-start + sm:mt-[26px] on the button: label (20px) + gap (6px)
+  // = 26px, so the button lines up with the input and stays there when an error appears.
   return (
     <form
       onSubmit={handleSubmit}
@@ -53,12 +53,12 @@ export default function AddDeviceForm({ token, onCreated, onAuthError }) {
           onChange={(event) => setName(event.target.value)}
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? 'device-name-error' : undefined}
-          // text-base (16px) phone pe: iPhone 16px se chhote input pe zoom kar deta hai.
+          // text-base (16px) on phones: iPhone zooms in on inputs smaller than 16px.
           className={`h-11 w-full rounded-lg border bg-white px-3 text-base text-slate-900 placeholder:text-slate-400 sm:h-10 sm:text-sm ${FOCUS} ${
             error ? 'border-amber-600' : 'border-slate-300'
           }`}
         />
-        {/* Error input ke theek neeche - kis cheez ki galti hai, saaf dikhe. Amber, laal nahi. */}
+        {/* Error sits right under the input so it is clear what is wrong. Amber, not red. */}
         {error && (
           <p id="device-name-error" role="alert" className="inline-flex items-start gap-1.5 text-sm text-amber-800">
             <span

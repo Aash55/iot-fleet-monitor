@@ -1,22 +1,23 @@
--- PURANE database pe chalao (local fleet + Neon), pgAdmin Query Tool se. CODE PUSH SE PEHLE:
--- naya consumer har INSERT mein `action` likhta hai. Column na ho to INSERT fail (42703) ->
--- consumer ise "DB ki kuch der ki dikkat" samajh ke retry karta rehta hai -> nayi readings
--- store hona BAND, jab tak column na aaye. (f1 mein GET 500 tha; yahan chupchaap ruk jaana.)
+-- Run on EXISTING databases (local fleet + Neon) via the pgAdmin Query Tool. BEFORE PUSHING CODE:
+-- the new consumer writes `action` in every INSERT. Without the column the INSERT fails (42703)
+-- -> the consumer takes it for "a temporary DB problem" and keeps retrying -> new readings STOP
+-- being stored until the column exists. (A missing `mode` column gave a GET 500; here it is a
+-- silent stall.)
 --
--- action = IPS ne is reading ke saath kya kiya:
---   'allowed' = prevent mode, model ne kaha theek hai (ya model tha hi nahi -> fail-open)
---   'blocked' = prevent mode, attack_proba >= 0.90 (ya features gayab the)
---   NULL      = detect mode - IPS ne koi faisla kiya hi nahi. Purani saari rows bhi NULL.
--- Isliye NULL allowed hai aur DEFAULT nahi: purani rows ko 'allowed' likhna JHOOTH hota -
--- us waqt koi faisla hua hi nahi tha.
--- CHECK: NULL CHECK ko pass kar jaata hai (NULL IN (...) = NULL, false nahi) - yahi chahiye.
+-- action = what the IPS did with this reading:
+--   'allowed' = prevent mode, the model said it is fine (or there was no model -> fail-open)
+--   'blocked' = prevent mode, attack_proba >= the model's block threshold (model.json), or features were missing
+--   NULL      = detect mode - the IPS made no decision at all. All existing rows are NULL too.
+-- That is why NULL is allowed and there is no DEFAULT: writing 'allowed' into old rows would be
+-- a LIE - no decision was made back then.
+-- CHECK: NULL passes the CHECK (NULL IN (...) = NULL, not false) - which is what we want.
 ALTER TABLE readings
   ADD COLUMN IF NOT EXISTS action TEXT
     CONSTRAINT readings_action_check CHECK (action IN ('allowed', 'blocked'));
 
--- Check 1: saari purani rows NULL. Ek hi line aani chahiye: (khaali) | <sab readings>
+-- Check 1: all existing rows are NULL. Expect exactly one line: (empty) | <all readings>
 SELECT action, count(*) AS readings FROM readings GROUP BY action;
 
--- Check 2: 1 row, CHECK wala rule dikhna chahiye
+-- Check 2: 1 row, showing the CHECK rule
 SELECT conname, pg_get_constraintdef(oid) AS rule
 FROM pg_constraint WHERE conname = 'readings_action_check';

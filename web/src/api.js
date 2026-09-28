@@ -9,7 +9,7 @@ export class ApiError extends Error {
 }
 
 // /status, not /health: EasyPrivacy blocks onrender.com/health (Brave Shields).
-// 200 is not enough: a wrong URL can return an HTML page with 200 (lesson 10).
+// 200 is not enough: a wrong URL can return an HTML page with 200.
 // "ok" only when the body is our JSON and says status "ok".
 export async function getHealth() {
   const res = await fetch(`${API_URL}/status`)
@@ -79,7 +79,7 @@ export async function getReadings(token, id, limit) {
     throw new ApiError(`Could not load readings: HTTP ${res.status}`, res.status)
   }
   const { readings } = await res.json()
-  return readings // P3.1: purana -> naya, ts UTC "...Z"
+  return readings // oldest -> newest, ts in UTC "...Z"
 }
 
 export async function createDevice(token, name) {
@@ -92,8 +92,8 @@ export async function createDevice(token, name) {
     body: JSON.stringify({ name }),
   })
 
-  // 400 = naam galat, 409 = ye naam pehle se hai (P3.1 ka UNIQUE). API dono mein
-  // same shape bhejta hai: { error: { name: [message] } }
+  // 400 = invalid name, 409 = name already exists (UNIQUE constraint). The API sends the
+  // same shape for both: { error: { name: [message] } }
   if (res.status === 400 || res.status === 409) {
     const body = await res.json().catch(() => ({}))
     throw new ApiError(body.error?.name?.[0] ?? 'Device name is not valid.', res.status)
@@ -105,8 +105,8 @@ export async function createDevice(token, name) {
   return res.json() // { device, api_key }
 }
 
-// P7-f4b: detect <-> prevent (API P7-f1 ka PATCH). Jawab mein poora naya device aata hai
-// (RETURNING), isliye alag GET ki zaroorat nahi. 404 = device nahi / tumhara nahi.
+// detect <-> prevent (the API's PATCH). The response contains the full updated device
+// (RETURNING), so no separate GET is needed. 404 = device does not exist / is not yours.
 export async function setDeviceMode(token, id, mode) {
   const res = await fetch(`${API_URL}/devices/${encodeURIComponent(id)}`, {
     method: 'PATCH',
@@ -128,8 +128,8 @@ export async function deleteDevice(token, id) {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${token}` },
   })
-  // 404 = pehle hi hat chuka (jaise doosre tab se). User ka maqsad poora ho gaya,
-  // isliye error nahi - delete idempotent hai.
+  // 404 = already deleted (e.g. from another tab). The user's goal is achieved,
+  // so it is not an error: delete is idempotent.
   if (res.status === 404) return
   if (!res.ok) {
     throw new ApiError(`Could not delete device: HTTP ${res.status}`, res.status)

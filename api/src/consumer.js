@@ -18,9 +18,9 @@ let loop = null;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// server.js ke boot race jaisa hi. node-redis mare hue socket pe HAMESHA retry karta
-// rehta hai, to bina race ke connect() na resolve hota hai na reject - process chup-chaap
-// latka rehta hai. Render pe iska matlab: app.listen() tak pahunchte hi nahi, deploy fail.
+// Same as the boot race in server.js. node-redis retries a dead socket FOREVER, so without
+// a race connect() neither resolves nor rejects - the process just hangs silently. On
+// Render that means we never reach app.listen(), and the deploy fails.
 const CONNECT_TIMEOUT_MS = 5000;
 
 async function connectOrFail(client) {
@@ -36,7 +36,7 @@ async function connectOrFail(client) {
       }),
     ]);
   } catch (err) {
-    client.destroy(); // retry loop band karo, warna event loop khula reh jaata hai
+    client.destroy(); // stop the retry loop, otherwise it keeps the event loop open
     throw err;
   } finally {
     clearTimeout(timer);
@@ -137,9 +137,9 @@ async function handleBatch(messages) {
     }
   }
 
-  // P5-f2: poore batch ka ek predict call. Score reading ke saath HI likhte hain (same INSERT),
-  // to reading aur uska score kabhi alag-alag nahi ho sakte.
-  // P7-f2: prevent mode wali rows ka score /ingest pehle hi de chuka - sirf baaki ko score karo.
+  // One predict call for the whole batch. The score is written together WITH the reading
+  // (same INSERT), so a reading and its score can never get out of sync.
+  // Rows from prevent mode were already scored by /ingest - score only the rest.
   const need = rows.filter((r) => !r.score);
   const preds = need.length ? await predict(need.map((r) => r.metricsObj)) : [];
   need.forEach((r, i) => {
@@ -206,7 +206,7 @@ async function insertMany(rows) {
   const tuples = [];
   const params = [];
   rows.forEach((r, i) => {
-    const b = i * 9; // P7-f2: 9 columns (action joda)
+    const b = i * 9; // 9 columns (including action)
     const ph = Array.from({ length: 9 }, (_, j) => `$${b + j + 1}`);
     tuples.push(`(${ph.join(", ")})`);
     params.push(
@@ -237,8 +237,8 @@ async function touchDevices(rows) {
 
   for (const [deviceId, seen] of latest) {
     // The guard keeps an out-of-order batch from moving last_seen backwards.
-    // P3.1: status ab yahan NAHI likhte - GET /devices use last_seen se nikalta hai.
-    // (status column drop ho chuka hai; ye line rehti to har batch pe error aata.)
+    // Status is NOT written here any more - GET /devices derives it from last_seen.
+    // (The status column has been dropped; writing it would error on every batch.)
     await pool.query(
       `UPDATE devices SET last_seen = $2
        WHERE id = $1 AND (last_seen IS NULL OR last_seen < $2)`,
@@ -268,13 +268,14 @@ function parseEntry(id, f) {
     return { ok: false, reason: "metrics is not a JSON object" };
   }
 
-  // P7-f2: prevent mode mein /ingest score kar chuka ho to wo yahan aata hai. Stream bhi
-  // boundary hai - yahan bhi check. Field hi na ho = detect mode -> neeche consumer khud score karega.
+  // In prevent mode /ingest has already scored the reading, and the score arrives here. The
+  // stream is a boundary too, so check it here as well. No field = detect mode -> the
+  // consumer scores it itself below.
   let score;
   if (f.attack_proba !== undefined) {
     const p = Number(f.attack_proba);
-    // Check SAKHT hi rehta hai (stream = boundary). P7-f4a-fix: asli value log mein - prod
-    // mein value nahi dikhi thi, isliye wajah dhoondhne mein ek chakkar zyada laga.
+    // The check stays STRICT (stream = boundary). The actual value goes into the log: in
+    // prod the value was not shown, so finding the cause took an extra round of digging.
     if (!(p >= 0 && p <= 1)) {
       return { ok: false, reason: `attack_proba not in 0..1 (${f.attack_proba})` };
     }
@@ -282,8 +283,8 @@ function parseEntry(id, f) {
       return { ok: false, reason: "is_attack not true/false" };
     score = { attack_proba: p, is_attack: f.is_attack === "true" };
   }
-  // Galat action DB ka CHECK bhi rokta, par tab poora batch fail hota aur row-by-row chalta.
-  // Yahin pakdo: sasta, aur log mein saaf wajah.
+  // The DB's CHECK would also reject a bad action, but then the whole batch fails and falls
+  // back to row-by-row. Catch it here instead: cheaper, and the log shows a clear reason.
   if (f.action !== undefined && f.action !== "allowed" && f.action !== "blocked") {
     return { ok: false, reason: "action not allowed/blocked" };
   }
@@ -297,9 +298,9 @@ function parseEntry(id, f) {
       ts: f.ts,
       received_at: f.received_at,
       metrics: f.metrics, // already a JSON string -> straight into JSONB
-      metricsObj: metrics, // P5-f2: model ke liye parsed copy (DB mein nahi jaati)
-      score, // P7-f2: undefined = abhi score hona baaki
-      action: f.action ?? null, // P7-f2: NULL = detect mode (koi IPS faisla nahi)
+      metricsObj: metrics, // parsed copy for the model (not stored in the DB)
+      score, // undefined = not scored yet
+      action: f.action ?? null, // NULL = detect mode (no IPS decision)
     },
   };
 }

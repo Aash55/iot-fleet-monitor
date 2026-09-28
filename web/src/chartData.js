@@ -1,22 +1,22 @@
-// Chart ke chhote helper. Alag file mein kyunki component file (.jsx) se sirf component
-// export hone chahiye - warna Vite ka Fast Refresh (save pe turant update) toot-ta hai.
+// Small chart helpers. They live in a separate file because a component file (.jsx) should
+// export only components; otherwise Vite's Fast Refresh (instant update on save) breaks.
 
-// API ts ko UTC "...Z" mein bhejta hai. Date.parse usse ek number (ms) bana deta hai:
-// ek pal = ek number, timezone ka koi lena-dena nahi. IST sirf DIKHATE waqt aata hai.
-// P5-f4: attack = model ne is reading ko attack kaha (API ka is_attack). Sirf `true` hi
-// attack hai: false = benign, null = score hi nahi hua (model unavailable) - "pata nahi"
-// ko laal dot nahi dikhana.
+// The API sends ts in UTC "...Z". Date.parse turns it into a number (ms): one instant = one
+// number, independent of time zone. IST only comes in when DISPLAYING.
+// attack = the model flagged this reading as an attack (the API's is_attack). Only `true`
+// counts as an attack: false = benign, null = not scored (model unavailable), and "unknown"
+// must not get a red dot.
 export function toChartData(readings, metric) {
   return readings.map((r) => ({
     t: Date.parse(r.ts),
     value: r.metrics[metric],
     attack: r.is_attack === true,
-    // P7-f4b: prevent mode ne roka (API P7-f4a ka action). 'allowed' / null (detect) = nahi.
+    // Blocked by prevent mode (the API's action field). 'allowed' / null (detect) = not blocked.
     blocked: r.action === 'blocked',
   }))
 }
 
-// Browser ka apna timezone (tumhare laptop pe IST). Code mein +5:30 kahin nahi jodna.
+// Uses the browser's own time zone (IST on an Indian laptop). Never add +5:30 in code.
 export function formatTime(t) {
   return new Date(t).toLocaleTimeString()
 }
@@ -25,14 +25,13 @@ export function formatDateTime(t) {
   return new Date(t).toLocaleString()
 }
 
-// 83400000 -> "83.4M": iat jaise bade number bhi Y-axis pe padhne layak rahein.
+// 83400000 -> "83.4M": keeps large numbers such as iat readable on the Y-axis.
 const compact = new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 })
 
 export function formatCompact(v) {
   return compact.format(v)
 }
 
-// P3.4 f-step 1 pe daala
 export function lastWindow(readings, windowMs) {
   if (readings.length === 0) {
      return readings

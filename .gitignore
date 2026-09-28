@@ -1,6 +1,6 @@
 node_modules/
 .env
-# P6.1: cloud (Neon + Upstash) ke secrets - .env.prod.local jaisi files kabhi commit nahi
+# cloud secrets (Neon + Upstash), e.g. .env.prod.local - never commit these
 .env.*.local
 data/
 .venv/

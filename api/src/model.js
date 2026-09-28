@@ -1,65 +1,66 @@
 //
-// Kaam: API process start hote hi ml/model.onnx EK BAAR load karna, aur /status ko batana
-// ki model "loaded" hai ya "unavailable". P5-f2 mein consumer yahi session har reading pe
-// use karega - har reading pe dobara load karna MBs ki file ko baar-baar parse karna hota.
+// Job: load ml/model.onnx ONCE when the process starts, and tell /status whether the
+// model is "loaded" or "unavailable". The consumer reuses this one session for every
+// reading - reloading per reading would mean parsing a multi-MB file over and over.
 //
-// Jaan-boojh ke "fail soft": model na mile to API band NAHI hoti. /ingest aur readings ka
-// store hona ML pe nirbhar nahi hai - ML sirf upar ki ek parat (alerts) hai. Isliye model
-// ka haal /status mein alag field hai, aur status 200/503 sirf DB + Redis se tay hota hai.
+// Deliberately "fail soft": if the model is missing, the API does NOT stop. /ingest and
+// storing readings do not depend on ML - ML is only a layer on top (alerts). So the model's
+// state is a separate field in /status, and the 200/503 status comes only from DB + Redis.
 
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { errText } from "./errText.js";
 
-// Local: api/src/ se do upar = repo root, phir ml/. Render pe ye tabhi dikhega jab service ka
-// Root Directory repo root ho (Render docs: root dir ke bahar ki files build/runtime pe nahi milti).
+// Local: two levels up from api/src/ = repo root, then ml/. On Render this is only visible if
+// the service's Root Directory is the repo root (Render docs: files outside the root dir are
+// not available at build/runtime).
 const ML_DIR = process.env.ML_DIR || path.join(import.meta.dirname, "..", "..", "ml");
 
 const state = {
   status: "not_loaded", // not_loaded -> loaded | unavailable
   session: null,
-  ort: null, // onnxruntime-node module, P5-f2 mein Tensor banane ke kaam aayega
-  meta: null, // model.json: features ka ORDER, input ka naam
+  ort: null, // onnxruntime-node module, used to build input Tensors in predict()
+  meta: null, // model.json: feature ORDER, input name
 };
 
 const mb = (bytes) => (bytes / 1024 / 1024).toFixed(1);
 
 export async function loadModel() {
-  if (state.status === "loaded") return; // worker + API dono bulaayen to bhi ek hi baar
+  if (state.status === "loaded") return; // only once, even if both worker and API call it
   const rssBefore = process.memoryUsage().rss;
   const t0 = performance.now();
   const onnxPath = path.join(ML_DIR, "model.onnx");
 
   try {
-    // Dynamic import, static NAHI: native binary na mile to static import poora server
-    // boot pe hi gira deta. Yahan wo error try/catch mein aata hai -> "unavailable".
+    // Dynamic import, NOT static: if the native binary is missing, a static import would
+    // crash the whole server at boot. Here that error lands in try/catch -> "unavailable".
     const ort = await import("onnxruntime-node");
 
     const meta = JSON.parse(await readFile(path.join(ML_DIR, "model.json"), "utf8"));
     const k = meta.features?.length;
-    if (!k) throw new Error("model.json mein features khaali");
-    // P9-c2: alert/block threshold model ke SAATH aate hain (val pe chune, train.py). Code mein
-    // hardcode NAHI: naya model = naye scores = naye threshold. Galat/gayab = model load hi nahi
-    // (-> "unavailable" -> IPS fail-open), aadha-adhoora faisla nahi.
+    if (!k) throw new Error("model.json has an empty features list");
+    // The alert/block thresholds ship WITH the model (picked on the validation set, train.py).
+    // NOT hardcoded: new model = new scores = new thresholds. Invalid/missing = the model does
+    // not load at all (-> "unavailable" -> IPS fails open), rather than half-working decisions.
     const t = meta.thresholds;
     const inRange = (v) => Number.isFinite(v) && v > 0 && v <= 1;
     if (!inRange(t?.alert) || !inRange(t?.block) || t.alert > t.block) {
-      throw new Error(`model.json thresholds galat: ${JSON.stringify(t)} (0 < alert <= block <= 1 chahiye)`);
+      throw new Error(`model.json thresholds invalid: ${JSON.stringify(t)} (need 0 < alert <= block <= 1)`);
     }
 
     const { size } = await stat(onnxPath);
     const session = await ort.InferenceSession.create(onnxPath);
     if (!session.inputNames.includes(meta.input)) {
-      throw new Error(`model input "${meta.input}" nahi mila, mile: ${session.inputNames}`);
+      throw new Error(`model input "${meta.input}" not found, found: ${session.inputNames}`);
     }
 
-    // Warm-up: ek nakli row (saare 0) chala ke dekho. File load hona != model chalna.
-    // Feature ginti galat ho to yahin error aata hai, pehli asli reading pe nahi.
+    // Warm-up: run one dummy row (all zeros). Loading the file != the model actually running.
+    // A wrong feature count fails here, not on the first real reading.
     const out = await session.run({
       [meta.input]: new ort.Tensor("float32", new Float32Array(k), [1, k]),
     });
     if (out.probabilities?.data.length !== 2) {
-      throw new Error("warm-up: probabilities mein 2 number nahi aaye");
+      throw new Error("warm-up: probabilities did not contain 2 numbers");
     }
 
     Object.assign(state, { status: "loaded", session, ort, meta });
@@ -71,7 +72,7 @@ export async function loadModel() {
     );
   } catch (err) {
     state.status = "unavailable";
-    // Path saath mein chhapo: Render pe shell nahi hai, ye log line hi saboot hai.
+    // Print the path too: Render has no shell, so this log line is the only evidence.
     console.error(`Model load failed (ML_DIR ${ML_DIR}):`, errText(err));
   }
 }
@@ -80,24 +81,24 @@ export function modelStatus() {
   return state.status;
 }
 
-// P9-c2: ingest.js (prevent mode) isse block ka faisla leta hai. Model load nahi = null.
+// ingest.js (prevent mode) uses this to decide whether to block. Model not loaded = null.
 export function blockThreshold() {
   return state.meta?.thresholds.block ?? null;
 }
 
 let warnedUnavailable = false;
 
-// P5-f2: ek batch ki saari readings ek hi session.run mein (parity: 800 rows 4.8 ms).
-// Input : metrics objects ki list, jaise [{ flow_duration: 1.2, rate: 30, ... }, ...]
-// Output: HAR input ke liye { attack_proba, is_attack } ya null, same order mein.
-// is_attack = attack_proba >= thresholds.alert (P9-c2; pehle ONNX label = 0.5 tha).
-// null = "score nahi hua" (model nahi hai, ya koi feature gayab/number nahi). Reading phir
-// bhi store hoti hai - prediction na hona reading ko rokne ki wajah nahi. Kabhi throw nahi.
+// All readings of a batch in a single session.run (parity check: 800 rows in 4.8 ms).
+// Input : a list of metrics objects, e.g. [{ flow_duration: 1.2, rate: 30, ... }, ...]
+// Output: for EACH input, { attack_proba, is_attack } or null, in the same order.
+// is_attack = attack_proba >= thresholds.alert (previously the ONNX label, i.e. 0.5).
+// null = "not scored" (no model, or a feature is missing/not a number). The reading is still
+// stored - a missing prediction is no reason to block a reading. Never throws.
 export async function predict(metricsList) {
   const results = metricsList.map(() => null);
   if (state.status !== "loaded") {
     if (!warnedUnavailable) {
-      console.error("Predict: model unavailable - readings bina score ke store hongi");
+      console.error("Predict: model unavailable - readings will be stored without a score");
       warnedUnavailable = true;
     }
     return results;
@@ -105,12 +106,12 @@ export async function predict(metricsList) {
 
   const { features, input } = state.meta;
   const k = features.length;
-  const idx = []; // kaunsi input rows score hongi (baaki null rahengi)
+  const idx = []; // which input rows get scored (the rest stay null)
   const data = new Float32Array(metricsList.length * k);
 
   metricsList.forEach((m, i) => {
-    // ORDER model.json se, metrics object ke keys ke order se NAHI. Galat order = model galat
-    // column padhega aur koi error nahi aayega. Ek bhi feature gayab = 0 maan ke guess NAHI.
+    // ORDER comes from model.json, NOT from the metrics object's key order. Wrong order = the
+    // model reads the wrong columns with no error. Any feature missing = do NOT guess it as 0.
     const row = features.map((f) => m[f]);
     if (!row.every(Number.isFinite)) return;
     data.set(row, idx.length * k);
@@ -122,12 +123,12 @@ export async function predict(metricsList) {
     const out = await state.session.run({
       [input]: new state.ort.Tensor("float32", data.subarray(0, idx.length * k), [idx.length, k]),
     });
-    const proba = out.probabilities.data; // har row ke 2: [benign, attack]
+    const proba = out.probabilities.data; // 2 per row: [benign, attack]
     idx.forEach((inputRow, j) => {
-      // P7-f4a-fix: float32 mein trees ka average kabhi 1 se ZARA upar aata hai (1.0000001 =
-      // float32 mein 1 ke baad agla number). Prod (Render Linux) pe yahi hua: consumer ka
-      // "0..1" check blocked readings DROP kar raha tha. Source pe hi 0..1 mein daba do -
-      // ingest (prevent) aur consumer (detect) dono ko saaf number mile, DB mein bhi.
+      // In float32 the average over the trees sometimes lands JUST above 1 (1.0000001 = the
+      // next float32 after 1). That happened in prod (Render Linux): the consumer's "0..1"
+      // check was DROPPING blocked readings. Clamp to 0..1 at the source, so both ingest
+      // (prevent) and the consumer (detect) get a clean number, and so does the DB.
       const p = Math.min(1, Math.max(0, proba[j * 2 + 1]));
       results[inputRow] = { attack_proba: p, is_attack: p >= state.meta.thresholds.alert };
     });

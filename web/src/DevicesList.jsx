@@ -1,5 +1,5 @@
-// P8-b mein LOGIC nahi badla (poll 5 s, retry false, cancelQueries, confirm, 401 -> logout).
-// Sirf dikhawat: page header, amber notices, skeleton, aur phone pe row ka naya dhaancha.
+// Behaviour: poll every 5 s, retry off, cancelQueries before cache writes, confirm before
+// delete, 401 -> log out. UI: page header, amber notices, loading skeleton, phone row layout.
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -10,8 +10,8 @@ import BlockedBadge from './BlockedBadge.jsx'
 import { PreventChip, StatusChip } from './Chips.jsx'
 import Notice from './Notice.jsx'
 
-// status (online/offline) server har request pe last_seen se nikalta hai (P3.1).
-// Naya status dekhne ka ek hi tareeka hai: list dobara maango. Isliye har 5 s poll.
+// The server derives status (online/offline) from last_seen on every request.
+// The only way to see a new status is to fetch the list again, hence the 5 s poll.
 const POLL_MS = 5000
 const DEVICES_KEY = ['devices']
 const FOCUS = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600'
@@ -24,8 +24,8 @@ function messageFor(err, networkMessage) {
   return err instanceof TypeError ? networkMessage : err.message
 }
 
-// Pehla load: asli rows jaisi grey patti (skeleton). "Loading..." text se kam jhatka lagta hai,
-// kyunki data aane pe page ka dhaancha wahi rehta hai. Text sr-only = sirf screen reader ke liye.
+// First load: grey bars shaped like the real rows (skeleton). Less jarring than "Loading..."
+// text, because the page layout stays the same when data arrives. sr-only = screen readers only.
 function ListSkeleton() {
   return (
     <div aria-busy="true" className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white">
@@ -43,16 +43,16 @@ function ListSkeleton() {
 
 export default function DevicesList({ token, email, onAuthError }) {
   const queryClient = useQueryClient()
-  const [revealed, setRevealed] = useState(null) // { name, api_key } - sirf memory mein
+  const [revealed, setRevealed] = useState(null) // { name, api_key } - kept in memory only
   const [copyState, setCopyState] = useState('') // '' | 'copied' | 'blocked'
 
   const devicesQuery = useQuery({
     queryKey: DEVICES_KEY,
     queryFn: () => getDevices(token),
     refetchInterval: POLL_MS,
-    // Polling khud hi retry hai: fail hua to 5 s baad dobara maangegi. Default retry
-    // (3 baar, 1+2+4 s ruk ke) API band hone pe har round mein 4 request bhejta aur
-    // error ~7 s der se dikhata.
+    // Polling is itself the retry: a failed request is repeated 5 s later. The default retry
+    // (3 times, waiting 1+2+4 s) would send 4 requests per round while the API is down and
+    // show the error ~7 s late.
     retry: false,
   })
 
@@ -62,30 +62,30 @@ export default function DevicesList({ token, email, onAuthError }) {
       updateList((list) => list.filter((d) => d.id !== device.id)),
   })
 
-  // 401 kahin se bhi aaye (poll ya delete) -> logout. Render ke andar nahi, effect mein.
+  // A 401 from anywhere (poll or delete) -> log out. Done in an effect, not during render.
   const authFailed =
     devicesQuery.error?.status === 401 || deleteMutation.error?.status === 401
   useEffect(() => {
     if (authFailed) onAuthError()
   }, [authFailed, onAuthError])
 
-  // List ko haath se badlo, par PEHLE chalu poll rok do. Warna jo GET badlaav se pehle
-  // nikal chuka tha, wo purani list laa ke hamara badlaav mita deta.
+  // Update the list by hand, but cancel the running poll FIRST. Otherwise a GET sent before
+  // the change would return the old list and overwrite our change.
   async function updateList(change) {
     await queryClient.cancelQueries({ queryKey: DEVICES_KEY })
     queryClient.setQueryData(DEVICES_KEY, (list) => (list ? change(list) : list))
   }
 
   function handleCreated(device, apiKey) {
-    // Locked (P1): add ke baad refetch nahi - POST ka device list ke upar jodo.
-    // GET bhi created_at DESC deta hai, isliye upar hi sahi jagah hai.
+    // No refetch after adding: prepend the device from the POST response to the list.
+    // GET also returns created_at DESC, so the top is the correct position.
     updateList((list) => [device, ...list])
     setRevealed({ name: device.name, api_key: apiKey })
     setCopyState('')
   }
 
   function handleDelete(device) {
-    // ON DELETE CASCADE: device ke saath uski saari readings bhi DB se hat jaati hain.
+    // ON DELETE CASCADE: deleting a device also deletes all of its readings from the DB.
     const ok = window.confirm(
       `Delete "${device.name}"? All of its readings will be deleted too. This cannot be undone.`
     )
@@ -101,7 +101,7 @@ export default function DevicesList({ token, email, onAuthError }) {
     }
   }
 
-  if (authFailed) return null // logout ho raha hai; RequireAuth /login bhej dega
+  if (authFailed) return null // logging out; RequireAuth will redirect to /login
 
   const devices = devicesQuery.data ?? []
   const loadError = devicesQuery.isError
@@ -114,7 +114,7 @@ export default function DevicesList({ token, email, onAuthError }) {
 
   return (
     <section className="flex flex-col gap-5 sm:gap-6">
-      {/* Page header: phone pe sab ek ke neeche ek; 640px+ pe "Updated" daayein, neeche se line mein. */}
+      {/* Page header: stacked on phones; at 640px+ "Updated" sits on the right, bottom-aligned. */}
       <div className="flex flex-col gap-1 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between sm:gap-4">
         <div className="flex flex-col gap-1">
           <p className="text-sm text-slate-500">
@@ -159,7 +159,7 @@ export default function DevicesList({ token, email, onAuthError }) {
               <code className="block rounded-lg border border-amber-200 bg-white px-3 py-3 font-mono text-[13px] leading-5 break-all text-slate-900 sm:px-3.5 sm:text-sm">
                 {revealed.api_key}
               </code>
-              {/* Phone: do barabar button (grid-cols-2, 44px oonche). 640px+: chhote, ek line mein. */}
+              {/* Phone: two equal buttons (grid-cols-2, 44px tall). 640px+: smaller, on one line. */}
               <div className="grid grid-cols-2 gap-2 sm:flex">
                 <button
                   type="button"
@@ -195,13 +195,13 @@ export default function DevicesList({ token, email, onAuthError }) {
           ) : devices.length > 0 && (
             <ul className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white">
               {devices.map((device) => (
-                // PHONE FIX (P7 ka UNTESTED): pehle ek hi line mein naam + 4 chips + Delete the,
-                // 375px pe row screen se bahar nikalti thi aur naam gayab. Ab:
-                //   phone  = [naam/meta ... Delete] upar, chips NEECHE apni line mein (wrap)
-                //   640px+ = sab ek line: naam/meta | chips | Delete
-                // `sm:contents`: 640px+ pe upar wala wrapper div "gayab" (display: contents) ho
-                // jaata hai, uske bachche seedhe li ke flex items ban jaate hain. Delete pe
-                // sm:order-last = desktop pe wo chips ke BAAD aata hai.
+                // Phone layout fix: name + 4 chips + Delete used to share one line, so at 375px
+                // the row overflowed the screen and the name disappeared. Now:
+                //   phone  = [name/meta ... Delete] on top, chips BELOW on their own line (wrap)
+                //   640px+ = all on one line: name/meta | chips | Delete
+                // `sm:contents`: at 640px+ the top wrapper div "disappears" (display: contents),
+                // so its children become direct flex items of the li. sm:order-last on Delete
+                // puts it AFTER the chips on desktop.
                 <li key={device.id} className="flex flex-col gap-2.5 px-4 py-3.5 sm:flex-row sm:items-center sm:gap-4 sm:px-5">
                   <div className="flex items-start gap-3 sm:contents">
                     <div className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -225,7 +225,7 @@ export default function DevicesList({ token, email, onAuthError }) {
                       {deletingId === device.id ? 'Deleting...' : 'Delete'}
                     </button>
                   </div>
-                  {/* P7-f4b: mode badalna device page pe; list pe sirf dikhao ki kaun prevent mein hai */}
+                  {/* Mode is changed on the device page; the list only shows who is in prevent */}
                   <div className="flex flex-wrap gap-1.5 sm:justify-end">
                     <PreventChip mode={device.mode} />
                     <AttackBadge count={device.recent_attacks} />

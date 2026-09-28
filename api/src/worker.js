@@ -10,8 +10,8 @@ if (missing.length) {
   process.exit(1);
 }
 
-// Local pe consumer alag process hai (RUN_CONSUMER_IN_API=false) - use bhi model chahiye.
-// Render pe consumer API ke andar chalta hai, wahan server.js load karta hai.
+// Locally the consumer is a separate process (RUN_CONSUMER_IN_API=false), so it needs the
+// model too. On Render the consumer runs inside the API, and server.js loads it there.
 await loadModel();
 
 try {

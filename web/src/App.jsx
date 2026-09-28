@@ -9,9 +9,9 @@ import DevicesList from './DevicesList.jsx'
 import RequireAuth from './RequireAuth.jsx'
 import TopBar from './TopBar.jsx'
 
-// Recharts bhaari hai (~350 kB). Chart sirf device page pe chahiye, isliye wo page alag
-// file (chunk) mein banta hai aur tabhi download hota hai jab koi device kholo.
-// Devices list ka pehla load halka rehta hai.
+// Recharts is heavy (~350 kB) and the chart is only needed on the device page, so that page
+// is built as a separate chunk and downloaded only when a device is opened.
+// This keeps the first load of the devices list light.
 const DeviceDetail = lazy(() => import('./DeviceDetail.jsx'))
 
 export default function App() {
@@ -30,18 +30,18 @@ export default function App() {
       .catch(() => setApiStatus('API unreachable. Check the browser console.'))
   }, [])
 
-  // queryClient main.jsx mein ek hi baar banta hai, isliye handleLogout ki identity
-  // stable rehti hai (DevicesList ke effect ki dependency hai).
-  // Redirect yahan nahi - session null hote hi RequireAuth khud /login bhej dega.
+  // queryClient is created once in main.jsx, so handleLogout keeps a stable identity
+  // (it is a dependency of an effect in DevicesList).
+  // No redirect here: once session is null, RequireAuth sends the user to /login itself.
   const handleLogout = useCallback(() => {
     clearToken()
-    queryClient.clear() // agla user pichhle user ki device list cache se na dekhe
+    queryClient.clear() // the next user must not see the previous user's cached device list
     setSession(null)
   }, [queryClient])
 
   // Token from localStorage is only a claim. Ask /me whether the API still accepts it.
-  // P9-e: 401 = token thukraya -> logout. Baaki error (network, 5xx, cold start) -> 5 s baad
-  // dobara poochho. Pehle koi bhi error logout kar deta tha.
+  // 401 = token rejected -> log out. Any other error (network, 5xx, cold start) -> ask again
+  // after 5 s. Previously any error logged the user out.
   useEffect(() => {
     if (!session || session.user) return
     let active = true
@@ -69,10 +69,10 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
-      {/* Login page pe session nahi -> onLogout undefined -> Log out button nahi dikhta */}
+      {/* No session on the login page -> onLogout is undefined -> no Log out button */}
       <TopBar apiStatus={apiStatus} onLogout={session ? handleLogout : undefined} />
 
-      {/* P8-a: design ka container. max-w-5xl = 1024px. Phone pe px-4 py-6, 640px+ pe px-6 py-8. */}
+      {/* Page container. max-w-5xl = 1024px. px-4 py-6 on phones, px-6 py-8 at 640px+. */}
       <main className="mx-auto max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
         <Routes>
           <Route
@@ -81,8 +81,8 @@ export default function App() {
               session ? (
                 <Navigate to="/devices" replace />
               ) : (
-                // P8-d: design - card 400px chauda. Upar ki doori: desktop main ka py-8 (32px)
-                // + mt-16 (64px) = 96px; phone py-6 (24px) + mt-4 (16px) = 40px.
+                // Card is 400px wide. Top spacing: desktop main py-8 (32px) + mt-16 (64px)
+                // = 96px; phone py-6 (24px) + mt-4 (16px) = 40px.
                 <div className="mx-auto mt-4 w-full max-w-[400px] sm:mt-16">
                   <LoginForm onSuccess={handleLogin} />
                 </div>
@@ -94,7 +94,7 @@ export default function App() {
             path="/devices"
             element={
               <RequireAuth session={session}>
-                {/* P8-b: "Signed in as" ab DevicesList ke page header ke andar (design) */}
+                {/* "Signed in as" is shown inside the DevicesList page header */}
                 <DevicesList
                   token={session?.token}
                   email={session?.user?.email}

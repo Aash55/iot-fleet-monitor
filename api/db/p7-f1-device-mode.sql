@@ -1,22 +1,22 @@
--- PURANE database pe chalao (local fleet + Neon), pgAdmin Query Tool se. CODE PUSH SE PEHLE:
--- naya devices.js har SELECT mein `mode` padhta hai. Column na ho to GET /devices = 500
--- (expand-then-deploy: pehle DB phailao, phir code bhejo).
+-- Run on EXISTING databases (local fleet + Neon) via the pgAdmin Query Tool. BEFORE PUSHING CODE:
+-- the new devices.js reads `mode` in every SELECT. Without the column GET /devices = 500
+-- (expand-then-deploy: widen the DB first, then ship the code).
 --
--- mode = device kis tarah chalega:
---   'detect'  = IDS: sirf pehchaan ke alert (aaj tak ka behaviour)
---   'prevent' = IPS: attack lage to reading BLOCK (P7-f2 mein /ingest ye padhega)
--- DEFAULT 'detect' -> purane saare devices apne-aap detect mein, kuch nahi badalta.
--- NOT NULL -> "mode pata nahi" wali teesri halat hi nahi banti.
--- CHECK -> sirf ye 2 shabd. API ka zod bhi rokta hai; CHECK = DB ki aakhri deewar
---          (pgAdmin se ya kisi bug se galat value na ghuse).
--- IF NOT EXISTS -> dobara chalao to kuch nahi hota (constraint bhi isi ADD COLUMN ka hissa hai).
+-- mode = how the device is handled:
+--   'detect'  = IDS: detect and alert only (the behaviour so far)
+--   'prevent' = IPS: BLOCK the reading if it looks like an attack (/ingest reads this)
+-- DEFAULT 'detect' -> all existing devices land in detect automatically, nothing changes.
+-- NOT NULL -> no third "mode unknown" state can exist.
+-- CHECK -> only these 2 words. The API's zod also rejects others; CHECK = the DB's last wall
+--          (so a bad value cannot sneak in via pgAdmin or a bug).
+-- IF NOT EXISTS -> re-running does nothing (the constraint is part of this same ADD COLUMN).
 ALTER TABLE devices
   ADD COLUMN IF NOT EXISTS mode TEXT NOT NULL DEFAULT 'detect'
     CONSTRAINT devices_mode_check CHECK (mode IN ('detect', 'prevent'));
 
--- Check 1: har purana device 'detect' mein. Ek hi line aani chahiye: detect | <sab devices>
+-- Check 1: every existing device is in 'detect'. Expect exactly one line: detect | <all devices>
 SELECT mode, count(*) AS devices FROM devices GROUP BY mode;
 
--- Check 2: 1 row, CHECK wala rule dikhna chahiye
+-- Check 2: 1 row, showing the CHECK rule
 SELECT conname, pg_get_constraintdef(oid) AS rule
 FROM pg_constraint WHERE conname = 'devices_mode_check';

@@ -1,18 +1,18 @@
-# ml/pool.py   <-- ye P9-d pe badli (P9-a: NAYI file; P9-d: sirf comments - extract.js hat gayi)
+# ml/pool.py
 #
-# Kaam: data/ ke saare CICIoT2023 CSV (13 GB, ~170 file) EK baar padho, aur har label
-# (BenignTraffic + 33 attack types) se ek random, fixed-size sample nikaalo. Phir har row
-# ko 4 ALAG hisson mein baanto - koi row do hisson mein nahi:
-#     train (65%)  -> model yahin seekhega (learning curve isi ke 2k/20k/100k tukde lega)
-#     val   (15%)  -> threshold (0.5 / 0.9) yahin tune hoga
-#     test  (15%)  -> final number, SIRF ek baar
-#     demo  ( 5%)  -> simulator ke rows (model ne kabhi nahi dekhe)
-# Output: data/pool.npz (~30 MB) + data/pool_stats.json. data/ gitignored hai.
+# Reads every CICIoT2023 CSV in data/ (13 GB, ~170 files) ONCE and draws a random, fixed-size
+# sample from each label (BenignTraffic + 33 attack types). Each sampled row is then assigned
+# to one of 4 SEPARATE splits - no row is in two splits:
+#     train (65%)  -> the model learns from this (the learning curve takes its 2k/20k/100k slices)
+#     val   (15%)  -> the threshold (0.5 / 0.9) is tuned here
+#     test  (15%)  -> the final number, used ONLY once
+#     demo  ( 5%)  -> rows for the simulator (never seen by the model)
+# Output: data/pool.npz (~30 MB) + data/pool_stats.json. data/ is gitignored.
 #
-# Chalana (Git Bash, ml/ folder se):   uv run python pool.py
-#   --workers 4         kitne CSV ek saath padhein (har worker ~200-300 MB RAM)
-#   --attack-cap 6000   har attack type se max itni rows
-#   --benign-cap 200000 benign se max itni rows
+# Run (Git Bash, from the ml/ folder):   uv run python pool.py
+#   --workers 4         how many CSVs to read in parallel (each worker ~200-300 MB RAM)
+#   --attack-cap 6000   max rows kept per attack type
+#   --benign-cap 200000 max benign rows kept
 
 import argparse
 import json
@@ -33,26 +33,26 @@ OUT_STATS = DATA_DIR / "pool_stats.json"
 SEED = 42
 BENIGN = "BenignTraffic"
 
-# Wahi 10 feature jo P1 se lock hain (pehle api/scripts/extract.js mein; NORMALIZED naam). iat pool mein rehta hai (simulator ka
-# format same rahe); model train.py mein use nahi karta (leak).
+# The same 10 features fixed early in the project (previously in api/scripts/extract.js; NORMALIZED names). iat stays
+# in the pool (so the simulator format stays the same); the model in train.py does not use it (leak).
 FEATURES = [
     "flow_duration", "header_length", "protocol_type", "duration", "rate",
     "syn_count", "rst_count", "urg_count", "tot_size", "iat",
 ]
 LABEL = "label"
 
-# Hisse: [0, 0.15) test, [0.15, 0.30) val, [0.30, 0.35) demo, baaki train
+# Splits: [0, 0.15) test, [0.15, 0.30) val, [0.30, 0.35) demo, the rest train
 SPLITS = ["train", "val", "test", "demo"]
 CUTS = [("test", 0.15), ("val", 0.15), ("demo", 0.05)]
 
 
 def normalize(name):
-    # P1 wala normalize: "Tot size" -> tot_size, "Header_Length" -> header_length
+    # Column-name normalization: "Tot size" -> tot_size, "Header_Length" -> header_length
     return "_".join(name.strip().lower().replace("-", " ").split())
 
 
 def keep_smallest(keys, X, cap):
-    """keys mein sabse chhote `cap` wale rakho (bottom-k). Chhota tag = sample mein."""
+    """Keep the `cap` smallest keys (bottom-k). A small tag = in the sample."""
     if len(keys) <= cap:
         return keys, X
     idx = np.argpartition(keys, cap - 1)[:cap]
@@ -60,12 +60,12 @@ def keep_smallest(keys, X, cap):
 
 
 def read_one(path, caps):
-    """Ek CSV: sirf 11 column padho, kharab rows hatao, har label ka bottom-k lautao."""
+    """One CSV: read only the 11 columns, drop bad rows, return the bottom-k for each label."""
     header = pd.read_csv(path, nrows=0).columns
     by_norm = {normalize(c): c for c in header}
     missing = [w for w in FEATURES + [LABEL] if w not in by_norm]
     if missing:
-        return {"file": path.name, "error": f"column nahi mile: {missing}"}
+        return {"file": path.name, "error": f"columns not found: {missing}"}
 
     df = pd.read_csv(path, usecols=[by_norm[w] for w in FEATURES + [LABEL]],
                      dtype={by_norm[LABEL]: str}, low_memory=False)
@@ -74,11 +74,11 @@ def read_one(path, caps):
 
     X = df[FEATURES].apply(pd.to_numeric, errors="coerce").to_numpy(dtype=np.float64)
     labels = df[LABEL].fillna("").str.strip().to_numpy()
-    good = np.isfinite(X).all(axis=1) & (labels != "")   # khaali / inf / NaN / text = bahar
+    good = np.isfinite(X).all(axis=1) & (labels != "")   # empty / inf / NaN / text = dropped
     X, labels = X[good], labels[good]
 
-    # Har row ko ek random "tag" (0-1). Seed FILE KE NAAM se - to workers kitne bhi hon,
-    # kaun si file pehle khatam ho, har row ka tag wahi rahega -> output hamesha same.
+    # Give each row a random "tag" (0-1). Seeded by the FILE NAME - so no matter how many workers
+    # run or which file finishes first, each row keeps the same tag -> the output is always identical.
     rng = np.random.default_rng([SEED, zlib.crc32(path.name.encode())])
     tags = rng.random(len(X))
 
@@ -102,13 +102,13 @@ def main():
 
     files = sorted(p for p in DATA_DIR.iterdir() if p.suffix.lower() == ".csv") if DATA_DIR.exists() else []
     if not files:
-        print(f"FAIL: {DATA_DIR} mein ek bhi .csv nahi")
+        print(f"FAIL: no .csv files in {DATA_DIR}")
         sys.exit(1)
     size_gb = sum(p.stat().st_size for p in files) / 1e9
     print(f"{len(files)} CSV, {size_gb:.1f} GB   workers {args.workers}   "
           f"cap: attack {args.attack_cap:,}/type, benign {args.benign_cap:,}")
 
-    pool = {}      # label -> (tags, X): chalta hua bottom-k, har file ke baad merge
+    pool = {}      # label -> (tags, X): running bottom-k, merged after each file
     seen, rows_read, skipped, done = {}, 0, 0, 0
     t0 = time.time()
     with ProcessPoolExecutor(max_workers=args.workers) as ex:
@@ -123,8 +123,8 @@ def main():
             skipped += r["skipped"]
             for lab, n in r["seen"].items():
                 seen[lab] = seen.get(lab, 0) + n
-            # Merge: global bottom-k = (purana bottom-k + is file ka bottom-k) ka bottom-k.
-            # RAM mein kabhi bhi sirf ~cap rows per label -> 13 GB bhi chhote RAM mein.
+            # Merge: global bottom-k = bottom-k of (previous bottom-k + this file's bottom-k).
+            # RAM only ever holds ~cap rows per label -> even 13 GB fits in a small amount of RAM.
             for lab, (tg, X) in r["keep"].items():
                 if lab in pool:
                     tg = np.concatenate([pool[lab][0], tg])
@@ -135,9 +135,9 @@ def main():
             if done % 10 == 0 or done == len(files):
                 print(f"  {done}/{len(files)} file   {rows_read:,} row   {time.time() - t0:.0f} s")
 
-    # ---- 4 hisse. Har label ke andar tag se sort -> random order. Pehle 15% test, agle
-    # 15% val, agle 5% demo, baaki train. Train bhi tag-order mein -> learning curve ke
-    # 2k, 20k, 100k tukde NESTED (2k wale rows 20k mein bhi hain), sirf data ka size badle.
+    # ---- 4 splits. Within each label, sort by tag -> random order. First 15% test, next
+    # 15% val, next 5% demo, the rest train. Train is also in tag order -> the learning curve's
+    # 2k, 20k, 100k slices are NESTED (the 2k rows are also in the 20k), only the data size changes.
     labels = sorted(pool)
     Xs, lab_ids, split_ids, ranks = [], [], [], []
     per_label = {}
@@ -155,7 +155,7 @@ def main():
             counts[name] = k
             start += k
         counts["train"] = n - start
-        rank = np.zeros(n, dtype=np.int32)   # train ke andar position (0 = sabse pehle chuna)
+        rank = np.zeros(n, dtype=np.int32)   # position within train (0 = picked first)
         rank[start:] = np.arange(n - start)
         Xs.append(X)
         lab_ids.append(np.full(n, i, dtype=np.int16))
@@ -175,9 +175,9 @@ def main():
     OUT_STATS.write_text(json.dumps(stats, indent=2) + "\n", encoding="utf-8", newline="\n")
 
     # ---- Report ----
-    print(f"\nrows read {rows_read:,}   skipped {skipped:,} (khaali/inf/NaN)   {time.time() - t0:.0f} s")
+    print(f"\nrows read {rows_read:,}   skipped {skipped:,} (empty/inf/NaN)   {time.time() - t0:.0f} s")
     print(f"labels {len(labels)} (benign 1 + attack {len(labels) - (BENIGN in labels)})\n")
-    print(f"  {'label':<26}{'dataset mein':>13}{'liya':>9}{'train':>8}{'val':>7}{'test':>7}{'demo':>7}")
+    print(f"  {'label':<26}{'in dataset':>13}{'kept':>9}{'train':>8}{'val':>7}{'test':>7}{'demo':>7}")
     for lab in sorted(labels, key=lambda l: per_label[l]["seen"]):
         s = per_label[lab]
         print(f"  {lab:<26}{s['seen']:>13,}{s['kept']:>9,}{s['train']:>8,}{s['val']:>7,}{s['test']:>7,}{s['demo']:>7,}")
@@ -187,20 +187,20 @@ def main():
     # ---- Self-check ----
     problems = []
     if len(labels) != 34:
-        problems.append(f"34 label chahiye (CICIoT2023), mile {len(labels)}")
+        problems.append(f"expected 34 labels (CICIoT2023), got {len(labels)}")
     if BENIGN not in labels:
-        problems.append("BenignTraffic nahi mila")
+        problems.append("BenignTraffic not found")
     if not np.isfinite(X).all():
-        problems.append("pool mein inf/NaN bacha")
+        problems.append("inf/NaN left in the pool")
     if sum(tot.values()) != len(X):
-        problems.append("hisson ka jod != total rows (koi row do jagah / gayab)")
-    # Twin check: test ki kitni rows ka EXACT same feature vector train mein bhi hai.
-    # Ye row-share nahi (alag packets), par flood attacks mein same shakal baar-baar aati hai.
+        problems.append("sum of splits != total rows (a row is in two splits / missing)")
+    # Twin check: how many test rows have the EXACT same feature vector as some train row.
+    # This is not row sharing (different packets), but flood attacks repeat the same shape over and over.
     feat9 = [FEATURES.index(f) for f in FEATURES if f != "iat"]
     tr = {r.tobytes() for r in X[split_id == SPLITS.index("train")][:, feat9]}
     te = X[split_id == SPLITS.index("test")][:, feat9]
     twins = sum(r.tobytes() in tr for r in te)
-    print(f"  test rows jinka exact twin (9 feature) train mein bhi: {twins:,} / {len(te):,} "
+    print(f"  test rows with an exact twin (9 features) in train: {twins:,} / {len(te):,} "
           f"({twins / max(len(te), 1):.1%})")
 
     mb = OUT_NPZ.stat().st_size / 1e6
@@ -208,8 +208,8 @@ def main():
     if problems:
         print("\nSELF-CHECK FAIL: " + "; ".join(problems))
         sys.exit(1)
-    print("\nSELF-CHECK PASS: 34 label, koi inf/NaN nahi, har row sirf ek hisse mein")
+    print("\nSELF-CHECK PASS: 34 labels, no inf/NaN, every row in exactly one split")
 
 
-if __name__ == "__main__":   # Windows pe workers "spawn" hote hain - ye guard zaroori
+if __name__ == "__main__":   # on Windows workers are "spawned" - this guard is required
     main()

@@ -4,7 +4,7 @@ export default function RequireAuth({ session, children }) {
   const location = useLocation()
 
   if (!session) {
-    // Kahan jaana chahta tha, wo yaad rakho - login ke baad wahin bhej denge.
+    // Remember where the user was going, so login can send them back there.
     return <Navigate to="/login" replace state={{ from: location.pathname }} />
   }
 
