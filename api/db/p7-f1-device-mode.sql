@@ -1,4 +1,3 @@
--- api/db/p7-f1-device-mode.sql  -> ye f-step P7-f1 pe daalni hai (NAYI file)
 -- PURANE database pe chalao (local fleet + Neon), pgAdmin Query Tool se. CODE PUSH SE PEHLE:
 -- naya devices.js har SELECT mein `mode` padhta hai. Column na ho to GET /devices = 500
 -- (expand-then-deploy: pehle DB phailao, phir code bhejo).

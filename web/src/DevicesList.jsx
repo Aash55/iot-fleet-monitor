@@ -1,4 +1,3 @@
-// web/src/DevicesList.jsx  -> ye f-step P8-b pe daalni hai (P3.4 step 2; P5-f4: AttackBadge; P7-f4b: prevent chip + BlockedBadge; P8-b: Claude Design layout + phone fix)
 // P8-b mein LOGIC nahi badla (poll 5 s, retry false, cancelQueries, confirm, 401 -> logout).
 // Sirf dikhawat: page header, amber notices, skeleton, aur phone pe row ka naya dhaancha.
 import { useEffect, useState } from 'react'

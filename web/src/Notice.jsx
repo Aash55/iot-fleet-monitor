@@ -1,4 +1,3 @@
-// web/src/Notice.jsx  -> ye f-step P8-b pe daalni hai (NAYI file - amber "dhyan do" dabba)
 // Pehle errors laal (bg-red-50) the. Par laal = attack. API down hona attack nahi hai,
 // isliye design ne errors ko amber kiya. Ek hi component: list, device page, login sab yahi use karein.
 export default function Notice({ children }) {

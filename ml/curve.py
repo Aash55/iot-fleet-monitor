@@ -1,4 +1,3 @@
-# ml/curve.py   <-- ye P9-b pe daalni hai (NAYI file)
 #
 # Kaam: LEARNING CURVE. Sawaal: "zyada data dene se model kitna behtar hota hai, aur kahan ruk jaata hai?"
 # data/pool.npz (P9-a) ke TRAIN hisse se 2k, 20k, 100k rows per bucket (benign N + attack N) lo,

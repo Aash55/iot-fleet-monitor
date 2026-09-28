@@ -1,4 +1,3 @@
-// web/src/App.jsx  -> ye f-step P9-e pe daalni hai (P3.3: /devices/:id route; P8-a: TopBar + naya page container; P8-b: email -> DevicesList; P8-d: login card jagah; P9-e: /me sirf 401 pe logout, baaki pe retry)
 import { Suspense, lazy, useCallback, useEffect, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router'
 import { useQueryClient } from '@tanstack/react-query'

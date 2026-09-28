@@ -1,4 +1,3 @@
-// api/src/consumer.js  -> ye f-step P7-f4a-fix pe daalni hai (P3.1: touchDevices; P5-f2: predict; P7-f2: /ingest ka score + action; P7-f4a-fix: drop log mein value)
 import { pool } from "./db.js";
 import { redis, TELEMETRY_STREAM } from "./redis.js";
 import { errText } from "./errText.js";

@@ -1,4 +1,3 @@
-<!-- README.md -> ye f-step P9-e pe daalni hai (P6.4: diagram + screenshots + cold start; P5-f5: ML section; P7-f5: IPS mode; P8-d2: redesign screenshots + 13 tests; P9-d: ML section naye data/model/thresholds ke saath; P9-e: logout sirf 401, rate-limit gap, 15 tests) -->
 # IoT Fleet Monitor
 
 Devices send telemetry over HTTP. The API accepts it fast, queues it in a Redis stream,
@@ -360,7 +359,7 @@ compares the Node output with scikit-learn on every test row.
 
 The deployed stack (API on Render, web on Vercel) is checked with Postman collections that
 assert on body content, not only status codes: the JSON health reply, the CORS header and the
-current JavaScript bundle name.The API test collection is in api/postman/ (Postman v12 format). Open the folder in Postman, set baseUrl, token and apiKey, and run it.
+current JavaScript bundle name. The API test collection is in `api/postman/` (Postman v12 format). Open the folder in Postman and run it: `baseUrl` and `origin` are prefilled, and request 02 registers a fresh test user and stores its token.
 
 ## What's next
 

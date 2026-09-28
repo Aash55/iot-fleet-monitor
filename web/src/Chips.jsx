@@ -1,4 +1,3 @@
-// web/src/Chips.jsx  -> ye f-step P9-e pe daalni hai (P8-b: NAYI file - design ke chips ek jagah; P9-e: tooltip mein number nahi)
 // Chip = chhota gol label (online, prevent, "3 attacks · 15 min"). Sabka dhaancha same:
 // h-6, rounded-full, text-xs, aage ek chhota nishaan (dot / ✕ / diamond). Sirf rang alag.
 // RANG KA MATLAB (tootna nahi chahiye): laal = attack, violet = blocked, hara = online.

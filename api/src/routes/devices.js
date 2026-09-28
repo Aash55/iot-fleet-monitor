@@ -1,4 +1,3 @@
-// api/src/routes/devices.js  -> ye f-step P9-c2 pe daalni hai (P3.1; P5-f3: recent_attacks + score; P7-f1: mode + PATCH; P7-f4a: recent_blocked + action; P9-c2: comment - thresholds model.json se)
 import { Router } from "express";
 import { z } from "zod";
 import { pool } from "../db.js";

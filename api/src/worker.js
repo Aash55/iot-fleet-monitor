@@ -1,4 +1,3 @@
-// api/src/worker.js  -> ye f-step P5-f2 pe daalni hai (P5-f2: loadModel)
 import { startConsumer, stopConsumer } from "./consumer.js";
 import { pool } from "./db.js";
 import { errText } from "./errText.js";

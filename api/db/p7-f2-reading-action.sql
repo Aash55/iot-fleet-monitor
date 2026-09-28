@@ -1,4 +1,3 @@
--- api/db/p7-f2-reading-action.sql  -> ye f-step P7-f2 pe daalni hai (NAYI file)
 -- PURANE database pe chalao (local fleet + Neon), pgAdmin Query Tool se. CODE PUSH SE PEHLE:
 -- naya consumer har INSERT mein `action` likhta hai. Column na ho to INSERT fail (42703) ->
 -- consumer ise "DB ki kuch der ki dikkat" samajh ke retry karta rehta hai -> nayi readings

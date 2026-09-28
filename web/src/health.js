@@ -1,4 +1,3 @@
-// web/src/health.js  -> ye f-step P8-a pe daalni hai (NAYI file)
 // Top bar ka health text (getHealth ka jawab) -> kaunsa rang dikhana hai.
 // Alag .js file kyun: pure function hai, `node --test` se bina browser ke test ho jaata hai
 // (chartData.js jaisa). Component file (.jsx) se sirf component export hone chahiye.

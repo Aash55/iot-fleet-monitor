@@ -1,4 +1,3 @@
-// api/scripts/onnx-parity.js   <-- ye P4 f-step 4 pe api/scripts/ mein daalni hai
 //
 // Kaam: Node (onnxruntime-node) mein ml/model.onnx chala ke dekhna ki sklearn jaisa hi jawab
 // aata hai. Test rows + sklearn ki probability ml/parity.local.json mein hain (train.py banata hai,

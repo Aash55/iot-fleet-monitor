@@ -1,4 +1,3 @@
-// api/scripts/fleetFile.js  -> ye f-step P6.3-f3 pe daalni hai (naya: --fleet flag ka ek hi check)
 // Fleet file mein device API keys hoti hain. Repo PUBLIC hai.
 // Isliye sirf scripts/ ke andar ka naam, aur naam `.local.json` pe khatam hona chahiye
 // (root .gitignore ki line `*.local.json` usi ko chhupati hai).

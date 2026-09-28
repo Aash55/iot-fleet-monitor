@@ -1,4 +1,3 @@
-// web/src/chartData.js  -> ye f-step P7-f4b pe daalni hai (P3.3; P5-f4: attack flag; P7-f4b: blocked flag)
 // Chart ke chhote helper. Alag file mein kyunki component file (.jsx) se sirf component
 // export hone chahiye - warna Vite ka Fast Refresh (save pe turant update) toot-ta hai.
 

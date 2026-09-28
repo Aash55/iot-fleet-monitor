@@ -1,4 +1,3 @@
-// web/src/LoginForm.jsx  -> ye f-step P8-d pe daalni hai (P2: login form; P8-d: Claude Design card + amber error)
 // P8-d mein LOGIC nahi badla: galat password pe password khaali, network error ka alag text,
 // busy mein button band. Sirf dikhawat + shabd "Sign in" -> "Log in" (design).
 import { useState } from 'react'

@@ -1,4 +1,3 @@
-// web/src/AddDeviceForm.jsx  -> ye f-step P8-b pe daalni hai (P3.2: form; P8-b: design ka card + inline amber error)
 import { useState } from 'react'
 import { createDevice } from './api.js'
 

@@ -1,4 +1,3 @@
-# ml/compare.py   <-- ye P9-c1 pe daalni hai (NAYI file)
 #
 # Kaam: P9-b ki galti theek karna. P9-b ne sab models ko threshold 0.5 pe milaya - par har model ka
 # FPR alag tha (old 0.4%, naye 7-9%). Alag FPR pe recall milana = alag race ke time milana.

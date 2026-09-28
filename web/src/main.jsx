@@ -1,4 +1,3 @@
-// web/src/main.jsx  -> ye f-step 3 pe daalni hai (P3.2)
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router'

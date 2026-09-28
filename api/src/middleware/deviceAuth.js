@@ -1,4 +1,3 @@
-// api/src/middleware/deviceAuth.js  -> ye f-step P7-f2 pe daalni hai (P7-f2: mode bhi padho)
 import { pool } from "../db.js";
 import { hashApiKey } from "../apiKey.js";
 

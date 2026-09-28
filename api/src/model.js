@@ -1,4 +1,3 @@
-// api/src/model.js  -> ye f-step P9-c2 pe daalni hai (P5-f1: loadModel; P5-f2: predict; P7-f4a-fix: proba 0..1 clamp; P9-c2: thresholds model.json se)
 //
 // Kaam: API process start hote hi ml/model.onnx EK BAAR load karna, aur /status ko batana
 // ki model "loaded" hai ya "unavailable". P5-f2 mein consumer yahi session har reading pe

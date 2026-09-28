@@ -1,4 +1,3 @@
-# ml/demo.py   <-- ye P9-d pe daalni hai (NAYI file; api/scripts/extract.js ki jagah)
 #
 # Kaam: simulator ke liye api/scripts/samples.local.json banana - SIRF pool ke DEMO hisse se
 # (5%, P9-a). Ye rows model ne na train mein dekhi, na val (threshold) mein, na test mein.

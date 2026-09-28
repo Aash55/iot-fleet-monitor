@@ -1,4 +1,3 @@
-// web/tests/setDeviceMode.test.js  -> ye f-step P7-f4b pe daalni hai (NAYI file)
 // Nakli API (getHealth.test.js jaisa): dekhte hain ki setDeviceMode sahi request bhejta hai
 // aur galti pe ApiError (status ke saath) phenkta hai - ModeToggle 401 pe logout isi se karta hai.
 import { after, before, test } from 'node:test'

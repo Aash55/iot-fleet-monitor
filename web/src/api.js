@@ -1,4 +1,3 @@
-// web/src/api.js  -> ye f-step P7-f4b pe daalni hai (P3.3: getDevice + getReadings; P6.3-f2C: /health -> /status; P6.3-f4: getHealth sirf asli JSON "ok" = ok; P7-f4b: setDeviceMode)
 const API_URL = import.meta.env.VITE_API_URL
 
 export class ApiError extends Error {

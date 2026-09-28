@@ -1,4 +1,3 @@
-// api/scripts/simulate.js   <-- ye f-step P9-d pe daalni hai (P1 3.1/3.2: simulator; P6.3-f3: --fleet flag; P7-f3: gateway/PEP; P9-d: samples ab ml/demo.py se; P9-d2: summary text)
 //
 // Kaam: sim device ban ke asli CICIoT2023 rows ko POST /ingest pe bhejna.
 //   f-step 3.1 -> config + file load + row chunna + --dry-run self-check

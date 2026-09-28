@@ -1,4 +1,3 @@
-// web/tests/shouldLogout.test.js  -> ye f-step P9-e pe daalni hai (NAYI file)
 // /me fail hone pe logout sirf 401 pe. Network error / 5xx / cold start pe NAHI (App.jsx retry karta hai).
 // api.js import NAHI (usko Vite ka import.meta.env chahiye) - ApiError jaisa object: sirf .status matter karta hai.
 import { test } from 'node:test'

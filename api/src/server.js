@@ -1,4 +1,3 @@
-// api/src/server.js  -> ye f-step P5-f1 pe daalni hai (P6.2-f1: boot timeout 8000; P5-f1: loadModel)
 import app from "./app.js";
 import { redis } from "./redis.js";
 import { errText } from "./errText.js";

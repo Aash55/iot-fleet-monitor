@@ -1,4 +1,3 @@
-// api/src/app.js  -> ye f-step P5-f1 pe daalni hai (P6.3-f2C: /status alias; P5-f1: model field)
 import express from "express";
 import cors from "cors";
 import { pool } from "./db.js";

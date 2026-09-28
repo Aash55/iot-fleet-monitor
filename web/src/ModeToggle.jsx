@@ -1,4 +1,3 @@
-// web/src/ModeToggle.jsx  -> ye f-step P9-e pe daalni hai (P7-f4b: NAYI file; P8-c: design ka card + segmented + spinner; P9-e: help text mein number nahi)
 // Device page pe Detect | Prevent. Click -> PATCH /devices/:id -> jawab ka naya device
 // parent ko (onChanged), jo cache mein daal deta hai. Screen tabhi badalti hai jab SERVER
 // haan bol de - pehle se "prevent" dikha dena (optimistic) galat hota agar PATCH fail ho.

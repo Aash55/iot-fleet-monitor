@@ -1,4 +1,3 @@
-// api/scripts/provision.js  -> ye f-step P6.3-f3 pe daalni hai (P1: pehli baar; P6.3-f3: --fleet flag)
 // N simulator device banata hai aur unki API key ek gitignored file mein likh deta hai.
 // Chalane ka tareeka (Git Bash, api/ folder se):
 //   npm run provision -- 6                                  -> local API, scripts/fleet.local.json

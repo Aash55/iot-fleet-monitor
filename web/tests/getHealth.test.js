@@ -1,4 +1,3 @@
-// web/tests/getHealth.test.js  -> ye f-step P6.3-f4 pe daalni hai (getHealth: sirf asli JSON "ok" = ok)
 import { after, before, test } from 'node:test'
 import assert from 'node:assert/strict'
 import http from 'node:http'

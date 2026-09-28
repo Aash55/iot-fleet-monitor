@@ -1,4 +1,3 @@
-// web/src/ReadingsChart.jsx  -> ye f-step P8-c pe daalni hai (P3.3; P5-f4: attack dots; P7-f4b: blocked ✕; P8-b: ✕ violet; P8-c: design ka axis/tooltip/height)
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { formatCompact, formatDateTime, formatTime } from './chartData.js'
 

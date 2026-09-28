@@ -1,4 +1,3 @@
-// web/src/DeviceDetail.jsx  -> ye f-step P8-c pe daalni hai (P3.4 step 2; P5-f4: AttackBadge + attack note; P7-f4b: mode toggle + BlockedBadge + ✕ note; P8-c: Claude Design layout + states)
 // P8-c mein LOGIC nahi badla (dono query 5 s poll, retry false, 404/400 = not found,
 // 401 -> logout, mode ka jawab cache mein cancelQueries ke baad). Sirf dikhawat.
 import { useEffect, useState } from 'react'

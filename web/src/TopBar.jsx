@@ -1,4 +1,3 @@
-// web/src/TopBar.jsx  -> ye f-step P8-a pe daalni hai (NAYI file - Claude Design top bar)
 // Pehle ye sab App.jsx ke andar ek kaala header tha. Ab safed bar, aur health ka rang
 // uske matlab se (health.js). Desktop (sm = 640px+) pe health bar ke andar; phone pe bar
 // mein jagah nahi, to health bar ke NEECHE alag patti mein.
