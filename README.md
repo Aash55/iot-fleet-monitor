@@ -1,5 +1,7 @@
 # IoT Fleet Monitor
 
+[![CI](https://github.com/Aash55/iot-fleet-monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/Aash55/iot-fleet-monitor/actions/workflows/ci.yml)
+
 Devices send telemetry over HTTP. The API accepts it fast, queues it in a Redis stream,
 and a consumer scores every reading with an intrusion-detection model (Random Forest,
 exported to ONNX) and writes it to Postgres. A React dashboard shows each device's status,
@@ -76,7 +78,7 @@ flowchart TD
 | Web | React 19, Vite 8, React Router, TanStack Query, Recharts, Tailwind 4 |
 | ML | Python 3.14 (uv), pandas, scikit-learn (Random Forest), skl2onnx; onnxruntime-node in the API |
 | Hosting | Render (API), Vercel (web), all free tiers |
-| Tests | `node:test` (built in) for web, Postman / newman collections for the deployed stack |
+| Tests | `node:test`: 27 API integration tests (real Postgres + Redis) and 15 web unit tests, run by GitHub Actions on every push; a Postman collection for the deployed stack |
 
 ## Design decisions (and why)
 
@@ -330,7 +332,37 @@ Needs Node 24, PostgreSQL and a Redis-compatible server on `127.0.0.1:6379`.
 
 ## How to run tests
 
-Web unit tests use Node's built-in test runner (`node:test`), so there is no extra test
+GitHub Actions runs both suites on every push (`.github/workflows/ci.yml`): the API tests
+against Postgres 16 and Redis 7 service containers, and the web lint, tests and production build.
+
+**API integration tests (27).** They start the real Express app on a random port and talk to a
+real PostgreSQL and Redis, because what they check only exists there: UNIQUE constraints,
+consumer groups and `XACK`. They cover:
+
+- auth: register, lowercased emails, duplicate email (409), argon2id hashes, login, the same
+  401 for an unknown email and a wrong password, tampered JWTs
+- devices: the API key is shown once and only its SHA-256 is stored, name uniqueness per owner,
+  another user's device is 404 (not 403) for read, mode change, readings and delete
+- `/ingest`: missing or wrong keys, invalid bodies, identity taken from the key and never from
+  the body, detect mode (no score in the request), prevent mode (decision against the model's
+  own block threshold, `Server-Timing` header), and a missing feature is blocked, not guessed
+- consumer: readings land in Postgres with a score and are acked, the device turns online, a
+  full redelivery of the stream writes nothing twice, and a malformed entry is dropped and
+  acked without stopping the consumer
+
+The tests never use `DATABASE_URL` or `REDIS_URL` from your `.env`. They use
+`TEST_DATABASE_URL` (the database name must end in `_test`, and it is created if missing) and
+`TEST_REDIS_URL` (Redis logical DB 15 by default), so a test run cannot wipe dev or production data.
+
+```bash
+cd api
+npm ci
+TEST_DATABASE_URL=postgres://postgres:YOUR_PG_PASSWORD@localhost:5432/fleet_test npm test
+```
+
+Expected: `pass 27` and `fail 0`.
+
+**Web unit tests (15).** They use Node's built-in test runner (`node:test`), so there is no extra test
 package. Five cases check `getHealth()` (the header text) against a fake local server, so no
 network and no running API are needed: the real JSON "ok" reply, an HTML page with status 200,
 JSON without `status: "ok"`, broken JSON, and a 503. Two more check that only
